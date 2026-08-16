@@ -1,0 +1,67 @@
+name: CI
+
+# PRD 17-1:
+#   Git Push → Lint → Unit Test → Integration Test → Security Scan → Build → Deploy
+# 現時点では Lint / Test / Build / 依存スキャンまで。DAST・コンテナスキャン・
+# ペネトレーションテストは Step 6 以降で追加する (PRD 16-1)。
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Dependency Scan (PRD 16-1)。既知の脆弱性がある依存で本番へ出さない。
+      - name: Dependency scan
+        run: npm audit --audit-level=high
+
+      # Secret Scan (PRD 16-1)。APIキー・署名鍵がコミットに混ざっていないかを見る。
+      # 本命は GitHub の Secret Scanning / gitleaks だが、まず取りこぼしやすい
+      # 自前フォーマットのキーだけでも止める。
+      - name: Secret scan (reception keys)
+        run: |
+          if git grep -nE 'rk_(live|prod)_[A-Za-z0-9_-]{8,}|whsec_[A-Za-z0-9_-]{16,}' -- ':!*.md' ':!.github/**'; then
+            echo "本番用とみられるキーがコミットされています。Secret Manager へ移してください。"
+            exit 1
+          fi

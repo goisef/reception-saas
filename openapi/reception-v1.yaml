@@ -1,0 +1,1055 @@
+openapi: 3.1.0
+info:
+  title: 無人受付・来店管理SaaS API
+  version: "1.0.0"
+  description: |
+    店舗の来店データ基盤 API (PRD v6.0)。
+
+    このファイルが API 仕様の単一の正であり、SDK / TypeScript 型 /
+    API クライアント / ドキュメントはここから生成する (PRD 10-7)。
+
+    ## 認証
+    API Key を `Authorization: Bearer <key>` または `X-Api-Key` で送る。
+    キーは SHA-256 ハッシュのみ保管され、平文はサーバー側に残らない。
+
+    ## 互換性
+    `X-Api-Version` で日付ベースのバージョンを申告する。
+    サポート対象のバージョンは一定期間並行して受理される (PRD 10-6)。
+
+    ## 冪等性
+    作成系エンドポイントは `Idempotency-Key` を受け付ける。
+    同じキー・同じ内容の再送は初回のレスポンスを返し、
+    同じキーで内容が異なる場合は 409 を返す (PRD 10-4)。
+  contact:
+    name: Reception Platform
+
+servers:
+  - url: https://api.example.com
+    description: 本番
+  - url: http://localhost:3000
+    description: ローカル開発
+
+security:
+  - ApiKeyAuth: []
+
+tags:
+  - name: reception
+    description: 受付・退出
+  - name: reservations
+  - name: customers
+  - name: access-numbers
+  - name: device
+    description: 端末設定・バージョン・死活
+  - name: exports
+    description: 帳票
+  - name: webhooks
+  - name: system
+    description: ヘルスチェック
+
+paths:
+  /health:
+    get:
+      tags: [system]
+      summary: Liveness
+      description: プロセスが生きているかのみを返す。依存リソースは見ない。
+      security: []
+      responses:
+        "200":
+          description: 生存
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  service: { type: string }
+                  time: { type: string, format: date-time }
+
+  /ready:
+    get:
+      tags: [system]
+      summary: Readiness
+      description: 依存リソース込みでリクエストを受けられるか。
+      security: []
+      responses:
+        "200": { description: 受付可能 }
+        "503": { description: 依存リソースに到達できない }
+
+  /api/v1/customers:
+    get:
+      tags: [customers]
+      summary: 顧客一覧
+      parameters:
+        - { name: q, in: query, schema: { type: string }, description: 氏名/フリガナ/会員番号/メールの部分一致 }
+        - { name: memberCode, in: query, schema: { type: string } }
+        - $ref: "#/components/parameters/ApiVersion"
+      responses:
+        "200":
+          description: 一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Customer" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      tags: [customers]
+      summary: 顧客作成
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 100 }
+                memberCode: { type: string, maxLength: 50 }
+                nameKana: { type: string, maxLength: 100 }
+                email: { type: string, maxLength: 254 }
+                phone: { type: string, maxLength: 30 }
+                externalIds:
+                  type: object
+                  additionalProperties: { type: string }
+                note: { type: string, maxLength: 2000 }
+      responses:
+        "201":
+          description: 作成完了
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Customer" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /api/v1/customers/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [customers]
+      summary: 顧客詳細
+      parameters:
+        - name: include
+          in: query
+          schema: { type: string, enum: [history] }
+          description: history を指定すると来店・予約履歴と統計を同梱する
+      responses:
+        "200":
+          description: 詳細
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Customer" }
+                  history: { type: object }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [customers]
+      summary: 顧客更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200":
+          description: 更新完了
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Customer" }
+    delete:
+      tags: [customers]
+      summary: 顔認証データの利用停止
+      description: |
+        顧客レコードは来店履歴のため残し、顔認証の登録・同意のみを取り消す (PRD 8-5)。
+      parameters:
+        - name: target
+          in: query
+          required: true
+          schema: { type: string, enum: [face_recognition] }
+      responses:
+        "200": { description: 取り消し完了 }
+
+  /api/v1/reservations:
+    get:
+      tags: [reservations]
+      summary: 予約一覧
+      parameters:
+        - { name: storeId, in: query, schema: { type: string } }
+        - { name: customerId, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/ReservationStatus" } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: 一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Reservation" }
+    post:
+      tags: [reservations]
+      summary: 予約作成
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [storeId, startAt, endAt]
+              properties:
+                storeId: { type: string }
+                startAt: { type: string, format: date-time }
+                endAt: { type: string, format: date-time }
+                customerId: { type: string }
+                guestName: { type: string, maxLength: 100 }
+                serviceId: { type: string }
+                accessNumber:
+                  type: string
+                  pattern: '^\d{4}$'
+                  description: VIP・特定会員向けに固定番号を指定する場合
+                reserveNumber:
+                  type: boolean
+                  description: true なら予約時点で空き番号を確保する
+                note: { type: string, maxLength: 2000 }
+      responses:
+        "201":
+          description: 作成完了
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Reservation" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationFailed" }
+
+  /api/v1/reservations/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [reservations]
+      summary: 予約詳細
+      responses:
+        "200":
+          description: 詳細
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Reservation" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [reservations]
+      summary: 予約更新
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                startAt: { type: string, format: date-time }
+                endAt: { type: string, format: date-time }
+                status: { $ref: "#/components/schemas/ReservationStatus" }
+                serviceId: { type: string }
+                note: { type: string }
+                accessNumber: { type: string, pattern: '^\d{4}$' }
+      responses:
+        "200": { description: 更新完了 }
+    delete:
+      tags: [reservations]
+      summary: 予約削除
+      description: 受付済みで滞在中の予約は削除できない。先に退出処理が必要。
+      responses:
+        "204": { description: 削除完了 }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /api/v1/checkins:
+    get:
+      tags: [reception]
+      summary: 受付履歴
+      parameters:
+        - { name: storeId, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: 一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Visit" }
+    post:
+      tags: [reception]
+      summary: 受付
+      description: |
+        受付端末も外部システムも同じエンドポイントを使う。
+        `clientEventId` を付けるとオフライン同期時の二重受付を防げる (PRD Q-6)。
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/DeviceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [storeId, method]
+              properties:
+                storeId: { type: string }
+                method: { $ref: "#/components/schemas/ReceptionMethod" }
+                qrToken:
+                  type: string
+                  description: method=qr のとき必須。QRには参照トークンのみを載せる
+                accessNumber:
+                  type: string
+                  pattern: '^\d{4}$'
+                  description: method=number のとき必須
+                customerId: { type: string }
+                guestName: { type: string }
+                clientEventId:
+                  type: string
+                  description: 端末側で採番する重複排除キー
+      responses:
+        "201":
+          description: 受付完了
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      visit: { $ref: "#/components/schemas/Visit" }
+                      accessNumber: { type: [string, "null"] }
+                      message:
+                        type: string
+                        description: 端末に表示する文言。文言もサーバーが決める
+                      duplicate: { type: boolean }
+        "200": { description: 同じ clientEventId で受付済み }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /api/v1/checkouts:
+    get:
+      tags: [reception]
+      summary: 滞在中・超過の一覧
+      parameters:
+        - { name: storeId, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: 一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        visit: { $ref: "#/components/schemas/Visit" }
+                        overdueMinutes: { type: integer }
+                  summary:
+                    type: object
+                    properties:
+                      inStore: { type: integer }
+                      overdue: { type: integer }
+    patch:
+      tags: [reception]
+      summary: 退出
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [storeId]
+              properties:
+                storeId: { type: string }
+                visitId: { type: string }
+                accessNumber: { type: string, pattern: '^\d{4}$' }
+      responses:
+        "200":
+          description: 退出完了
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      visit: { $ref: "#/components/schemas/Visit" }
+                      stayMinutes: { type: integer }
+                      overdueMinutes: { type: integer }
+                      message: { type: string }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/visits/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [reception]
+      summary: 来店詳細
+      responses:
+        "200": { description: 詳細 }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [reception]
+      summary: 退出予定時刻の変更
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scheduledExitAt]
+              properties:
+                scheduledExitAt: { type: string, format: date-time }
+      responses:
+        "200": { description: 変更完了 }
+
+  /api/v1/access-numbers:
+    get:
+      tags: [access-numbers]
+      summary: 番号一覧
+      parameters:
+        - { name: storeId, in: query, required: true, schema: { type: string } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/AccessNumberStatus" } }
+      responses:
+        "200":
+          description: 一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/AccessNumber" }
+    post:
+      tags: [access-numbers]
+      summary: 番号確保
+      description: number 省略時は空き番号を払い出す。
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [storeId]
+              properties:
+                storeId: { type: string }
+                number: { type: string, pattern: '^\d{4}$' }
+                customerIds:
+                  type: array
+                  items: { type: string }
+                  description: 複数指定すると Shared Number になる
+                reservationId: { type: string }
+                pinned:
+                  type: boolean
+                  description: VIP等の固定番号。自動解放の対象外になる
+                holdFrom: { type: string, format: date-time }
+                holdUntil: { type: string, format: date-time }
+      responses:
+        "201": { description: 確保完了 }
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/access-numbers/{number}:
+    parameters:
+      - { name: number, in: path, required: true, schema: { type: string, pattern: '^\d{4}$' } }
+      - { name: storeId, in: query, required: true, schema: { type: string } }
+    get:
+      tags: [access-numbers]
+      summary: 番号詳細
+      responses:
+        "200": { description: 詳細 }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [access-numbers]
+      summary: Shared Number への顧客追加
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [storeId, customerIds]
+              properties:
+                storeId: { type: string }
+                customerIds:
+                  type: array
+                  items: { type: string }
+      responses:
+        "200": { description: 追加完了 }
+    delete:
+      tags: [access-numbers]
+      summary: 手動解放
+      description: 固定番号も解放できる唯一の経路。
+      responses:
+        "200": { description: 解放完了 }
+
+  /api/v1/access-numbers/sweep:
+    post:
+      tags: [access-numbers]
+      summary: 自動解放スイープ
+      description: |
+        退出済み+保持時間経過 / キャンセル / No-show / 予定終了+timeout を解放する。
+        Cloud Scheduler から定期実行する。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [storeId]
+              properties:
+                storeId: { type: string }
+      responses:
+        "200":
+          description: 解放結果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      releasedCount: { type: integer }
+                      released:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            number: { type: string }
+                            reason:
+                              type: string
+                              enum:
+                                - exited_hold_elapsed
+                                - cancelled
+                                - no_show
+                                - scheduled_end_timeout
+                                - manual
+
+  /api/v1/stores:
+    get:
+      tags: [device]
+      summary: 店舗一覧
+      responses:
+        "200": { description: 一覧 }
+
+  /api/v1/device/config:
+    get:
+      tags: [device]
+      summary: 端末設定の取得
+      description: |
+        受付ボタンの文言・並び・表示可否と、解決済みの Feature Flag を返す。
+        端末はこれをそのまま描画する (PRD 4-2 / 原則 P-1)。
+      parameters:
+        - { name: storeId, in: query, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/DeviceId"
+      responses:
+        "200":
+          description: 設定
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/ResolvedConfig" }
+    patch:
+      tags: [device]
+      summary: 端末設定の更新
+      description: 更新のたびに configVersion が 1 上がる。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [storeId]
+              properties:
+                storeId: { type: string }
+                theme: { type: string }
+                language: { type: string }
+                notificationSound: { type: string }
+                logo: { type: string }
+                buttons: { type: array, items: { type: object } }
+                flags: { type: array, items: { type: object } }
+      responses:
+        "200": { description: 更新完了 }
+
+  /api/v1/device/version:
+    get:
+      tags: [device]
+      summary: バージョン確認
+      description: |
+        現在より新しい版があれば updateAvailable。
+        重大なセキュリティ更新には forceUpdate が立つ (PRD 6-2)。
+      parameters:
+        - name: platform
+          in: query
+          required: true
+          schema: { type: string, enum: [pwa, android, ios] }
+        - name: version
+          in: query
+          schema: { type: string }
+          description: 省略時は X-App-Version ヘッダを使う
+      responses:
+        "200":
+          description: バージョン情報
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      platform: { type: string }
+                      currentVersion: { type: [string, "null"] }
+                      latest: { $ref: "#/components/schemas/AppRelease" }
+                      updateAvailable: { type: boolean }
+                      forceUpdate: { type: boolean }
+                      message: { type: string }
+
+  /api/v1/device/heartbeat:
+    get:
+      tags: [device]
+      summary: 端末の疎通状況
+      parameters:
+        - { name: thresholdMinutes, in: query, schema: { type: integer, default: 5 } }
+      responses:
+        "200": { description: 端末一覧と途絶端末 }
+    post:
+      tags: [device]
+      summary: 端末の死活通知
+      description: |
+        端末が定期送信する。途絶を検知して管理者へ通知する (PRD 12-4)。
+        未登録の deviceId は初回の heartbeat で自動登録される。
+      parameters:
+        - $ref: "#/components/parameters/DeviceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [storeId]
+              properties:
+                storeId: { type: string }
+                name: { type: string }
+                platform: { type: string, enum: [pwa, android, ios] }
+                appVersion: { type: string }
+                configVersion: { type: integer }
+      responses:
+        "200": { description: 受理 }
+
+  /api/v1/exports:
+    get:
+      tags: [exports]
+      summary: エクスポート一覧
+      responses:
+        "200": { description: 一覧 }
+    post:
+      tags: [exports]
+      summary: エクスポート要求
+      description: |
+        同期では返さない。キュー経由で生成し、完了後に署名付きURLを渡す (PRD 11-2)。
+        CSV は UTF-8 BOM 付き・CRLF (PRD 11-3)。
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resource, format]
+              properties:
+                resource:
+                  type: string
+                  enum: [customers, reservations, visits, access_numbers, notifications, api_logs]
+                format: { type: string, enum: [csv, xlsx, json] }
+                storeId: { type: string }
+                from: { type: string, format: date-time }
+                to: { type: string, format: date-time }
+      responses:
+        "202":
+          description: 受理（生成は非同期）
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/ExportJob" }
+
+  /api/v1/exports/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [exports]
+      summary: エクスポート状態
+      responses:
+        "200": { description: 状態 }
+
+  /api/v1/exports/{id}/run:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [exports]
+      summary: エクスポートの実行（ワーカー用）
+      responses:
+        "200": { description: 実行完了 }
+
+  /api/v1/exports/{id}/download:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: token, in: query, required: true, schema: { type: string } }
+    get:
+      tags: [exports]
+      summary: 帳票のダウンロード
+      responses:
+        "200":
+          description: ファイル
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "404": { description: 未生成または期限切れ }
+
+  /api/v1/webhooks/endpoints:
+    get:
+      tags: [webhooks]
+      summary: Webhook 配信先一覧
+      description: secret は返さない。作成時のレスポンスでのみ返す。
+      responses:
+        "200": { description: 一覧 }
+    post:
+      tags: [webhooks]
+      summary: Webhook 配信先の登録
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url, events]
+              properties:
+                url: { type: string, format: uri, description: https 必須 }
+                events:
+                  type: array
+                  items: { $ref: "#/components/schemas/WebhookEventType" }
+      responses:
+        "201":
+          description: 登録完了。secret はこの応答でのみ返る
+        "400": { description: url または events が不正 }
+
+  /api/v1/webhooks/drain:
+    get:
+      tags: [webhooks]
+      summary: 配信状況
+      responses:
+        "200": { description: 配信一覧と集計 }
+    post:
+      tags: [webhooks]
+      summary: 配信ワーカーの実行
+      responses:
+        "200": { description: 実行結果 }
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: http
+      scheme: bearer
+      description: |
+        `Authorization: Bearer <api key>`。`X-Api-Key: <api key>` も受け付ける。
+        スコープと RBAC でアクセス範囲が決まる (PRD 15)。
+
+  parameters:
+    ApiVersion:
+      name: X-Api-Version
+      in: header
+      schema: { type: string, example: "2026-01-01" }
+      description: 省略時は最新版として扱う。未サポートの版は 400。
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      schema: { type: string }
+      description: |
+        同一キー・同一内容の再送は初回のレスポンスを返す。
+        同一キーで内容が異なる場合は 409 `idempotency_key_reused`。
+    DeviceId:
+      name: X-Device-Id
+      in: header
+      schema: { type: string }
+      description: 受付端末の識別子。監査ログと段階リリースの判定に使う。
+
+  responses:
+    Unauthorized:
+      description: 認証エラー
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: 権限不足（スコープまたはデータ範囲外）
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: 対象が存在しない
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: 状態が矛盾している
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationFailed:
+      description: 入力値エラー
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: レート制限
+      headers:
+        Retry-After:
+          schema: { type: integer }
+        X-RateLimit-Limit:
+          schema: { type: integer }
+        X-RateLimit-Remaining:
+          schema: { type: integer }
+        X-RateLimit-Reset:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - bad_request
+                - validation_failed
+                - unauthorized
+                - forbidden
+                - not_found
+                - conflict
+                - idempotency_key_reused
+                - rate_limited
+                - unsupported_api_version
+                - signature_invalid
+                - replay_detected
+                - internal_error
+                - service_unavailable
+            message: { type: string }
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field: { type: string }
+                  message: { type: string }
+
+    Customer:
+      type: object
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        memberCode: { type: [string, "null"] }
+        name: { type: string }
+        nameKana: { type: [string, "null"] }
+        email: { type: [string, "null"] }
+        phone: { type: [string, "null"] }
+        externalIds:
+          type: object
+          additionalProperties: { type: string }
+        faceRecognition:
+          type: object
+          properties:
+            enrolled: { type: boolean }
+            consentAt: { type: [string, "null"], format: date-time }
+            retentionUntil: { type: [string, "null"], format: date-time }
+        note: { type: [string, "null"] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    ReservationStatus:
+      type: string
+      enum: [booked, checked_in, completed, cancelled, no_show]
+
+    Reservation:
+      type: object
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        storeId: { type: string }
+        customerId: { type: [string, "null"] }
+        guestName: { type: [string, "null"] }
+        serviceId: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/ReservationStatus" }
+        startAt: { type: string, format: date-time }
+        endAt: { type: string, format: date-time }
+        accessNumber: { type: [string, "null"] }
+        qrToken:
+          type: string
+          description: QRに埋め込む参照トークン。個人情報は含まない
+        qrTokenExpiresAt: { type: string, format: date-time }
+        source: { type: string, enum: [admin, api, calendar, reception] }
+        note: { type: [string, "null"] }
+
+    ReceptionMethod:
+      type: string
+      enum: [qr, number, face, staff, vendor, event, custom]
+
+    Visit:
+      type: object
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        storeId: { type: string }
+        reservationId: { type: [string, "null"] }
+        customerId: { type: [string, "null"] }
+        guestName: { type: [string, "null"] }
+        accessNumber: { type: [string, "null"] }
+        method: { $ref: "#/components/schemas/ReceptionMethod" }
+        status: { type: string, enum: [in_store, exited] }
+        checkedInAt: { type: string, format: date-time }
+        scheduledExitAt: { type: [string, "null"], format: date-time }
+        actualExitAt: { type: [string, "null"], format: date-time }
+        deviceId: { type: [string, "null"] }
+        clientEventId: { type: [string, "null"] }
+
+    AccessNumberStatus:
+      type: string
+      enum: [available, reserved, checked_in, in_use, exited, expired, released, locked]
+
+    AccessNumber:
+      type: object
+      properties:
+        id: { type: string }
+        tenantId: { type: string }
+        storeId: { type: string }
+        number: { type: string, pattern: '^\d{4}$' }
+        status: { $ref: "#/components/schemas/AccessNumberStatus" }
+        customerIds:
+          type: array
+          items: { type: string }
+          description: 複数なら Shared Number
+        reservationId: { type: [string, "null"] }
+        visitId: { type: [string, "null"] }
+        pinned: { type: boolean }
+        holdFrom: { type: [string, "null"], format: date-time }
+        holdUntil: { type: [string, "null"], format: date-time }
+        exitedAt: { type: [string, "null"], format: date-time }
+
+    ResolvedConfig:
+      type: object
+      properties:
+        configVersion: { type: integer }
+        logo: { type: [string, "null"] }
+        theme: { type: string }
+        language: { type: string }
+        notificationSound: { type: string }
+        buttons:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              label: { type: string }
+              action: { type: string }
+              order: { type: integer }
+        features:
+          type: object
+          additionalProperties: { type: boolean }
+        updatedAt: { type: string, format: date-time }
+
+    AppRelease:
+      type: object
+      properties:
+        version: { type: string }
+        buildNumber: { type: integer }
+        releaseDate: { type: string, format: date-time }
+        sha256: { type: [string, "null"], description: APK のハッシュ }
+        signingProfile: { type: [string, "null"], description: iOS の署名プロファイル }
+        minimumOs: { type: string }
+        supportedDevices: { type: array, items: { type: string } }
+        downloadUrl: { type: [string, "null"] }
+        releaseNotes: { type: string }
+
+    ExportJob:
+      type: object
+      properties:
+        id: { type: string }
+        resource: { type: string }
+        format: { type: string, enum: [csv, xlsx, json] }
+        status: { type: string, enum: [queued, running, succeeded, failed] }
+        downloadUrl: { type: [string, "null"] }
+        downloadUrlExpiresAt: { type: [string, "null"], format: date-time }
+        rowCount: { type: [integer, "null"] }
+        byteSize: { type: [integer, "null"] }
+        error: { type: [string, "null"] }
+
+    WebhookEventType:
+      type: string
+      enum:
+        - reservation.created
+        - reservation.updated
+        - reservation.deleted
+        - checkin.completed
+        - checkout.completed
+        - customer.created
+        - customer.updated
+        - access_number.reserved
+        - access_number.released
+
+  # Webhook の送信仕様。受信側の実装者向け。
+  # 署名対象は `<timestamp>.<nonce>.<raw body>`、5分以上古いものは拒否する。
+  examples:
+    WebhookHeaders:
+      value:
+        X-Reception-Signature: "t=1767225600,v1=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+        X-Reception-Nonce: "1f0c1b2d3e4f5a6b7c8d9e0f1a2b3c4d"
+        X-Reception-Event-Id: "evt_0a1b2c3d"
+        X-Request-Id: "req_9z8y7x"

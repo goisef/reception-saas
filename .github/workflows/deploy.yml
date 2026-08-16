@@ -1,0 +1,108 @@
+name: Deploy to Cloud Run
+
+# PRD 17-1: Git Push → Lint → Unit Test → Security Scan → Build → Deploy
+# CI (ci.yml) が通ったものだけをデプロイ対象にする。
+#
+# 認証は Workload Identity 連携を使う。サービスアカウントキーの JSON を
+# GitHub Secrets に置かない（PRD 13-4: 鍵を配らない）。
+#
+# 事前に必要な変数・シークレット:
+#   vars.GCP_PROJECT_ID            例: my-project
+#   vars.GCP_REGION                例: asia-northeast1
+#   vars.GCP_SERVICE_ACCOUNT       例: deployer@my-project.iam.gserviceaccount.com
+#   vars.GCP_WORKLOAD_IDENTITY_PROVIDER
+#     例: projects/123/locations/global/workloadIdentityPools/gh/providers/gh
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      traffic_percent:
+        description: '新リビジョンへ流す割合 (段階リリース)'
+        required: true
+        default: '5'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  # 同じリビジョンへの多重デプロイを避ける
+  group: deploy-cloud-run
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push image
+        id: image
+        run: |
+          TAG="${GITHUB_SHA::7}"
+          IMAGE="${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/reception/reception-saas:${TAG}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Render service definition
+        run: |
+          # SERVICE_ACCOUNT_EMAIL を先に置換する。後にすると PROJECT_ID の置換が
+          # メールアドレス内のプロジェクト名にも当たって壊れる。
+          sed -e "s|SERVICE_ACCOUNT_EMAIL|${{ vars.GCP_SERVICE_ACCOUNT }}|g" \
+              -e "s|IMAGE_TAG|${{ steps.image.outputs.tag }}|g" \
+              -e "s|PROJECT_ID|${{ vars.GCP_PROJECT_ID }}|g" \
+              -e "s|REGION|${{ vars.GCP_REGION }}|g" \
+              deploy/cloud-run.yaml > /tmp/cloud-run.rendered.yaml
+          cat /tmp/cloud-run.rendered.yaml
+
+      - name: Deploy (no traffic)
+        run: |
+          gcloud run services replace /tmp/cloud-run.rendered.yaml \
+            --region "${{ vars.GCP_REGION }}"
+
+      # 段階リリース (PRD 4-4)。一斉に 100% へ切り替えない。
+      - name: Shift traffic
+        run: |
+          PERCENT="${{ github.event.inputs.traffic_percent || '5' }}"
+          gcloud run services update-traffic reception-saas \
+            --region "${{ vars.GCP_REGION }}" \
+            --to-revisions "LATEST=${PERCENT}"
+          echo "新リビジョンへ ${PERCENT}% を流しました。"
+          echo "問題なければ --to-latest で 100% にしてください。"
+
+      - name: Smoke check
+        run: |
+          URL=$(gcloud run services describe reception-saas \
+            --region "${{ vars.GCP_REGION }}" --format 'value(status.url)')
+          # ingress を絞っている場合、この確認はロードバランサ経由で行う
+          echo "service url: $URL"
