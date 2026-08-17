@@ -143,15 +143,12 @@ scripts/                アイコン生成 / スモークテスト
 
 | 項目 | 内容 |
 | --- | --- |
-| Firestore ドライバ | いまは in-memory。プロセス再起動でデータが消える |
 | 管理Webの認証 | `lib/admin/session.ts` が開発用スタブ |
-| Rate Limit の共有ストア | 単一プロセス前提。複数インスタンスでは Redis 等が必要 |
-| Idempotency の共有ストア | 同上 |
+| Rate Limit の共有ストア | 単一プロセス前提。全リクエストで書き込みが発生するため、あえて Firestore に載せていない（`lib/security/rate-limit.ts` の説明を参照） |
 | Storage | 帳票をメモリに置いている。GCS + 署名付きURLへ |
 | キュー基盤 | Webhook / 帳票 / 通知のワーカーを手動エンドポイントで代用中 |
 | 通知の実送信 | Slack / Chatwork / Google Chat / Email のアダプタ未実装 |
 | PDF 帳票 | P0 対象外 |
 
-Cloud Run へ本番として出す前に、少なくとも **Firestore ドライバ**と
-**Rate Limit / Idempotency の共有ストア**は必要です。理由は
-[`DEPLOYMENT.md`](./DEPLOYMENT.md) の「本番前に必ず塞ぐ穴」に記載しています。
+共有URLを無料で立てる手順は [`HOSTING-FREE.md`](./HOSTING-FREE.md)、
+Cloud Run での本番運用は [`DEPLOYMENT.md`](./DEPLOYMENT.md) を参照してください。

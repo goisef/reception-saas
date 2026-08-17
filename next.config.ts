@@ -18,8 +18,9 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  // Cloud Run 用。node_modules を含めた最小構成が .next/standalone に出る
-  output: "standalone",
+  // Cloud Run / Docker 用。node_modules を含めた最小構成が .next/standalone に出る。
+  // Vercel は独自のビルド出力を使うため、この指定は不要かつ警告の元になる。
+  ...(process.env.VERCEL ? {} : { output: "standalone" as const }),
 
   async headers() {
     return [

@@ -78,7 +78,8 @@ APK / IPA                   設定変更
 | --- | --- |
 | 受付端末 PWA | Remote Config駆動のホーム / QR受付 / 4桁番号受付 / 退出、Service Worker、オフラインキュー、死活通知、バージョン確認 |
 | API v1 | 顧客 / 予約 / 受付 / 退出 / 来店 / 番号 / 店舗 / 端末 / 帳票 / Webhook、`/health` `/ready`、OpenAPI 3.1 |
-| セキュリティ | APIキー認証（ハッシュ保管）、RBAC 7ロール、テナント分離、Rate Limit、Idempotency-Key、監査ログ、APIバージョニング |
+| セキュリティ | APIキー認証（ハッシュ保管）、RBAC 7ロール、テナント分離、Rate Limit、Idempotency-Key、監査ログ、APIバージョニング、共有URLのパスワード保護 |
+| データ | Firestore ドライバ（in-memory と契約テストで等価性を担保）|
 | 4桁番号 | 8状態のライフサイクル、解放条件5種、Shared Number、時間指定確保、VIP固定番号 |
 | Webhook | HMAC-SHA256 + Timestamp + Nonce + Request ID、指数バックオフ再送 |
 | 帳票 | CSV（UTF-8 BOM）/ Excel / JSON、非同期パイプライン + 署名付きURL |
@@ -86,8 +87,8 @@ APK / IPA                   設定変更
 
 ### 未実装
 
-Firestore ドライバ（現在は in-memory）、管理Webの認証、Rate Limit と
-Idempotency の共有ストア、GCS、キュー基盤、通知の実送信、PDF帳票。
+管理Webの認証（現在は開発用スタブ）、Rate Limit の共有ストア、
+GCS、キュー基盤、通知の実送信、PDF帳票、顧客アプリ、SaaS管理画面、AI分析。
 
 **本番トラフィックを流す前に塞ぐべき穴**は
 [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) にまとめています。
@@ -117,7 +118,8 @@ Apple Business Manager / App Store を使い分けます。
 | [`docs/PRD.md`](./docs/PRD.md) | 製品要求仕様（単一の正） |
 | [`docs/ROADMAP.md`](./docs/ROADMAP.md) | Step 1〜9 の開発計画と進捗 |
 | [`docs/DEVELOPMENT.md`](./docs/DEVELOPMENT.md) | 開発ガイド・ディレクトリ構成・設計上の約束 |
-| [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) | Cloud Run へのデプロイ手順 |
+| [`docs/HOSTING-FREE.md`](./docs/HOSTING-FREE.md) | **無料で共有URLを立てる**（Vercel + Firestore） |
+| [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) | Cloud Run へのデプロイ手順（本番想定） |
 | [`openapi/reception-v1.yaml`](./openapi/reception-v1.yaml) | API 仕様（単一の正） |
 
 ---
