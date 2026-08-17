@@ -16,7 +16,11 @@
     "test:watch": "vitest",
     "icons": "node scripts/generate-icons.mjs",
     "docker:build": "docker build -t reception-saas:local .",
-    "docker:run": "docker run --rm -p 8080:8080 -e PORT=8080 reception-saas:local"
+    "docker:run": "docker run --rm -p 8080:8080 -e PORT=8080 reception-saas:local",
+    "password:show": "bash scripts/access-control.sh show",
+    "password:set": "bash scripts/access-control.sh set",
+    "demo:offline": "bash scripts/access-control.sh offline",
+    "demo:online": "bash scripts/access-control.sh online"
   },
   "dependencies": {
     "next": "16.2.4",
