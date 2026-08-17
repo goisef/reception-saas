@@ -31,9 +31,23 @@ type GlobalWithStore = typeof globalThis & {
   [GLOBAL_KEY]?: { datastore: Datastore; seeded: Promise<void> };
 };
 
+/**
+ * ドライバの選択はここ一箇所。
+ *
+ *   RECEPTION_DATASTORE=firestore  Firestore を使う（本番・共有環境）
+ *   未設定 / memory                in-memory（ローカル開発・テスト）
+ *
+ * in-memory はプロセス内にしか存在しないため、インスタンスが増えると
+ * データが食い違う。複数インスタンスで動かすなら firestore にすること。
+ */
 function createDatastore(): Datastore {
-  // NOTE: Firestore ドライバに切り替える場合はここだけ差し替える。
-  // 環境変数 RECEPTION_DATASTORE=firestore で分岐させる想定。
+  if (process.env.RECEPTION_DATASTORE === 'firestore') {
+    // 動的 require にして、in-memory 運用時に Firestore SDK を読み込まない。
+    // 初期化時に認証情報を探しに行くため、不要な環境では触らせない。
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { createFirestoreDatastore } = require('./firestore') as typeof import('./firestore');
+    return createFirestoreDatastore();
+  }
   return new MemoryDatastore();
 }
 

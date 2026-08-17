@@ -11,8 +11,13 @@
 
 export type Doc = { id: string; tenantId: string };
 
-/** テナントに属さないグローバル文書（アプリのリリース情報など）用の擬似テナント。 */
-export const GLOBAL_TENANT = '__global__';
+/**
+ * テナントに属さないグローバル文書（アプリのリリース情報など）用の擬似テナント。
+ *
+ * Firestore ドライバではこれがドキュメントIDになる。Firestore は
+ * `__...__` 形式のIDを予約しているため、その形にはできない。
+ */
+export const GLOBAL_TENANT = '_global';
 
 export interface Collection<T extends Doc> {
   get(tenantId: string, id: string): Promise<T | null>;

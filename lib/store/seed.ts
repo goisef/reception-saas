@@ -46,6 +46,18 @@ function at(base: Date, hours: number, minutes = 0): Date {
 export async function seed(ds: Datastore): Promise<void> {
   if (process.env.RECEPTION_SEED === '0') return;
 
+  // 永続ストア(Firestore)ではインスタンスが起動するたびに呼ばれる。
+  // そのまま流すと、デモ中に追加した予約や顧客が次のコールドスタートで
+  // 初期状態に戻ってしまう。投入済みなら何もしない。
+  // 同時起動で二重投入しないようロックを取る。
+  await ds.withLock('seed', async () => {
+    const existing = await ds.collection<Tenant>('tenants').get(DEMO_TENANT_ID, DEMO_TENANT_ID);
+    if (existing) return;
+    await insertSeedData(ds);
+  });
+}
+
+async function insertSeedData(ds: Datastore): Promise<void> {
   const now = new Date();
   const nowIso = iso(now);
 
