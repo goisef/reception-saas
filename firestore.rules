@@ -1,0 +1,23 @@
+rules_version = '2';
+
+// Firestore セキュリティルール。
+//
+// このアプリはサーバー(Cloud Run / Vercel の Server 側)からのみ Firestore を触る。
+// クライアントSDKは使わない。サーバーは Admin SDK 相当の権限で動くため
+// ルールの評価対象外であり、ここでの拒否はサーバー側の動作に影響しない。
+//
+// つまりこのルールの役割は「万一クライアントから直接叩かれたときに全部拒否する」
+// ことにある。ブラウザから Firestore を直接読める状態は、テナント分離
+// (原則 P-6) を根本から壊すので、明示的に閉じておく。
+//
+// 将来クライアントSDKを使う機能（顧客アプリのリアルタイム更新など）を入れる場合は、
+// そのコレクションだけを tenantId とカスタムクレームで絞って開けること。
+// 決して `allow read: if request.auth != null` のような広い許可を書かない。
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

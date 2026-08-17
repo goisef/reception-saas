@@ -144,7 +144,7 @@ export function apiRoute(
         : '';
 
       if (idempotencyKey) {
-        const cached = idempotency.lookup(
+        const cached = await idempotency.lookup(
           principal.tenantId,
           url.pathname,
           idempotencyKey,
@@ -186,7 +186,7 @@ export function apiRoute(
       if (idempotencyKey && response.status < 500) {
         // レスポンスは一度しか読めないので複製してから保存する
         const clonedBody = await response.clone().text();
-        idempotency.remember(
+        await idempotency.remember(
           principal.tenantId,
           url.pathname,
           idempotencyKey,

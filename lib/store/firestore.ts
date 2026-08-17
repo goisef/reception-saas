@@ -204,12 +204,41 @@ export class FirestoreDatastore implements Datastore {
   }
 }
 
+/**
+ * GCP の外（Vercel など）から繋ぐ場合の認証情報。
+ *
+ * Cloud Run 上なら Workload Identity で自動的に認証されるため何も要らないが、
+ * 外部ホストではサービスアカウント鍵が必要になる。鍵ファイルを置けないので
+ * 環境変数に JSON をそのまま入れて渡す。
+ */
+function credentialsFromEnv(): Pick<Settings, 'credentials'> | Record<string, never> {
+  const raw = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+  if (!raw) return {};
+
+  try {
+    const parsed = JSON.parse(raw) as { client_email?: string; private_key?: string };
+    if (!parsed.client_email || !parsed.private_key) return {};
+    return {
+      credentials: {
+        client_email: parsed.client_email,
+        // 環境変数に貼ると改行が \n のまま入ることがあるので戻す
+        private_key: parsed.private_key.replace(/\\n/g, '\n'),
+      },
+    };
+  } catch {
+    // ここで throw すると起動そのものが落ちる。/ready が error を返して
+    // 気付ける方が復旧しやすいので、認証情報なしで進める。
+    console.error('GOOGLE_APPLICATION_CREDENTIALS_JSON を JSON として解釈できませんでした');
+    return {};
+  }
+}
+
 export function createFirestoreDatastore(settings: Settings = {}): FirestoreDatastore {
   const projectId = process.env.FIRESTORE_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT;
   return new FirestoreDatastore(
     new Firestore({
       ...(projectId ? { projectId } : {}),
-      // Cloud Run では Workload Identity で認証されるため鍵ファイルは不要
+      ...credentialsFromEnv(),
       ignoreUndefinedProperties: true,
       ...settings,
     })

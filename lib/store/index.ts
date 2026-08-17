@@ -16,6 +16,7 @@ import type {
   WebhookDelivery,
   WebhookEndpoint,
 } from '../domain/types';
+import type { IdempotencyRecord } from '../security/idempotency';
 import { seed } from './seed';
 
 /**
@@ -86,6 +87,8 @@ export const collections = {
   webhookDeliveries: () => datastore().collection<WebhookDelivery>('webhook_deliveries'),
   exportJobs: () => datastore().collection<ExportJob>('export_jobs'),
   notifications: () => datastore().collection<NotificationRecord>('notifications'),
+  // 冪等キーの記録。プロセス内に持つとサーバーレスで再送が素通りする
+  idempotency: () => datastore().collection<IdempotencyRecord>('idempotency'),
 };
 
 export { GLOBAL_TENANT } from './datastore';

@@ -48,3 +48,8 @@ firebase-debug.log
 firestore-debug.log
 ui-debug.log
 .firebase/
+
+# service account keys
+*-service-account*.json
+serviceAccountKey*.json
+.vercel

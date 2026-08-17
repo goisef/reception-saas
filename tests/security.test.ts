@@ -2,7 +2,14 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { effectiveScopes, extractApiKey, assertStoreAccess, scopeStoreFilter } from '@/lib/security/auth';
 import type { Principal } from '@/lib/security/auth';
 import { consume, resetRateLimits } from '@/lib/security/rate-limit';
-import { hashRequest, lookup, remember, resetIdempotency } from '@/lib/security/idempotency';
+import {
+  hashRequest,
+  lookup,
+  remember,
+  resetIdempotency,
+  sweepExpired,
+} from '@/lib/security/idempotency';
+import { ready } from '@/lib/store';
 import { isFlagEnabled } from '@/lib/services/remote-config';
 import { stableBucket } from '@/lib/core/ids';
 
@@ -102,27 +109,62 @@ describe('Rate Limit', () => {
 });
 
 describe('Idempotency', () => {
-  beforeEach(() => resetIdempotency());
-
-  it('同じキー・同じ内容なら初回のレスポンスを返す', () => {
-    const hash = hashRequest('POST', '/api/v1/reservations', '{"a":1}');
-    remember('ten_a', '/api/v1/reservations', 'key1', hash, 201, '{"data":{}}');
-    expect(lookup('ten_a', '/api/v1/reservations', 'key1', hash)?.status).toBe(201);
+  // Datastore に載っているため非同期。プロセス内 Map ではなくなった。
+  beforeEach(async () => {
+    await ready();
+    await resetIdempotency('ten_a');
+    await resetIdempotency('ten_b');
   });
 
-  it('同じキーで内容が違えば 409', () => {
+  it('同じキー・同じ内容なら初回のレスポンスを返す', async () => {
+    const hash = hashRequest('POST', '/api/v1/reservations', '{"a":1}');
+    await remember('ten_a', '/api/v1/reservations', 'key1', hash, 201, '{"data":{}}');
+    const found = await lookup('ten_a', '/api/v1/reservations', 'key1', hash);
+    expect(found?.status).toBe(201);
+    expect(found?.body).toBe('{"data":{}}');
+  });
+
+  it('同じキーで内容が違えば 409', async () => {
     const hash1 = hashRequest('POST', '/api/v1/reservations', '{"a":1}');
     const hash2 = hashRequest('POST', '/api/v1/reservations', '{"a":2}');
-    remember('ten_a', '/api/v1/reservations', 'key1', hash1, 201, '{}');
-    expect(() => lookup('ten_a', '/api/v1/reservations', 'key1', hash2)).toThrowError(
-      expect.objectContaining({ code: 'idempotency_key_reused' })
-    );
+    await remember('ten_a', '/api/v1/reservations', 'key1', hash1, 201, '{}');
+    await expect(
+      lookup('ten_a', '/api/v1/reservations', 'key1', hash2)
+    ).rejects.toThrowError(expect.objectContaining({ code: 'idempotency_key_reused' }));
   });
 
-  it('テナントを跨いでキーが衝突しない', () => {
+  it('テナントを跨いでキーが衝突しない', async () => {
     const hash = hashRequest('POST', '/api/v1/reservations', '{"a":1}');
-    remember('ten_a', '/api/v1/reservations', 'key1', hash, 201, '{}');
-    expect(lookup('ten_b', '/api/v1/reservations', 'key1', hash)).toBeNull();
+    await remember('ten_a', '/api/v1/reservations', 'key1', hash, 201, '{}');
+    expect(await lookup('ten_b', '/api/v1/reservations', 'key1', hash)).toBeNull();
+  });
+
+  it('パスが違えば別の記録として扱う', async () => {
+    const hash = hashRequest('POST', '/api/v1/reservations', '{"a":1}');
+    await remember('ten_a', '/api/v1/reservations', 'key1', hash, 201, '{}');
+    expect(await lookup('ten_a', '/api/v1/customers', 'key1', hash)).toBeNull();
+  });
+
+  it('期限を過ぎた記録は無かったことになる', async () => {
+    const now = Date.now();
+    const hash = hashRequest('POST', '/api/v1/reservations', '{"a":1}');
+    await remember('ten_a', '/api/v1/reservations', 'key1', hash, 201, '{}', now);
+
+    const dayLater = now + 25 * 60 * 60 * 1000;
+    expect(await lookup('ten_a', '/api/v1/reservations', 'key1', hash, dayLater)).toBeNull();
+    // 期限切れなら中身が違っても 409 にはしない（記録が無いのと同じ扱い）
+    const other = hashRequest('POST', '/api/v1/reservations', '{"a":2}');
+    expect(await lookup('ten_a', '/api/v1/reservations', 'key1', other, dayLater)).toBeNull();
+  });
+
+  it('期限切れを掃除できる', async () => {
+    const now = Date.now();
+    const hash = hashRequest('POST', '/api/v1/reservations', '{"a":1}');
+    await remember('ten_a', '/api/v1/reservations', 'old', hash, 201, '{}', now - 48 * 60 * 60 * 1000);
+    await remember('ten_a', '/api/v1/reservations', 'new', hash, 201, '{}', now);
+
+    expect(await sweepExpired('ten_a', now)).toBe(1);
+    expect(await lookup('ten_a', '/api/v1/reservations', 'new', hash, now)).not.toBeNull();
   });
 });
 
