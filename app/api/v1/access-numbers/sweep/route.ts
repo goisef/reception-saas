@@ -27,6 +27,11 @@ export const POST = apiRoute(
             number: n.number,
             reason: outcome.reasons[n.id],
           })),
+          // 固定番号は解放ではなく、同じ顧客向けに再確保される
+          reheldCount: outcome.reheld.length,
+          reheld: outcome.reheld.map((n) => n.number),
+          // 処理できなかった番号。監視で拾えるよう黙って捨てない
+          failures: outcome.failures,
         },
       },
     };

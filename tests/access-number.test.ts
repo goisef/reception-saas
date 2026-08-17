@@ -5,11 +5,13 @@ import {
   formatNumber,
   InvalidNumberTransition,
   isAssignable,
+  isFree,
   pickAvailableNumber,
+  releasePath,
   shouldRehold,
   transition,
 } from '@/lib/domain/access-number';
-import type { AccessNumber } from '@/lib/domain/types';
+import type { AccessNumber, AccessNumberStatus } from '@/lib/domain/types';
 
 const BASE_TIME = new Date('2026-08-16T10:00:00.000Z');
 
@@ -63,6 +65,11 @@ describe('状態遷移', () => {
     expect(canTransition('exited', 'checked_in')).toBe(false);
   });
 
+  it('滞在中の番号は released へ直接遷移できない', () => {
+    // 「退出して解放された」と「放置されて期限切れ」を混同しないための制約
+    expect(canTransition('in_use', 'released')).toBe(false);
+  });
+
   it('exited への遷移でのみ exitedAt が入る', () => {
     const now = '2026-08-16T11:00:00.000Z';
     const exited = transition(number({ status: 'in_use' }), 'exited', now);
@@ -78,6 +85,54 @@ describe('状態遷移', () => {
     expect(isAssignable(number({ status: 'released' }))).toBe(true);
     expect(isAssignable(number({ status: 'exited' }))).toBe(false);
     expect(isAssignable(number({ status: 'locked' }))).toBe(false);
+  });
+});
+
+describe('解放経路', () => {
+  it('退出済みは直接 released へ', () => {
+    expect(releasePath('exited')).toEqual(['released']);
+  });
+
+  it('滞在中は expired を経由する', () => {
+    // 退出せずに放置された番号。直接 released にすると
+    // 「退出して解放」と「放置されて期限切れ」を履歴から区別できなくなる
+    expect(releasePath('in_use')).toEqual(['expired', 'released']);
+  });
+
+  it('確保済み・期限切れは直接 released へ', () => {
+    expect(releasePath('reserved')).toEqual(['released']);
+    expect(releasePath('expired')).toEqual(['released']);
+  });
+
+  it('既に空きの状態は何もしない（解放は冪等）', () => {
+    expect(releasePath('released')).toEqual([]);
+    expect(releasePath('available')).toEqual([]);
+    expect(isFree('released')).toBe(true);
+    expect(isFree('available')).toBe(true);
+    expect(isFree('in_use')).toBe(false);
+  });
+
+  it('占有中のどの状態からも released へ到達でき、経路は状態機械として妥当', () => {
+    const occupied: AccessNumberStatus[] = [
+      'reserved',
+      'checked_in',
+      'in_use',
+      'exited',
+      'expired',
+      // 管理者の手動解放で locked も解放できる必要がある
+      'locked',
+    ];
+    for (const status of occupied) {
+      const path = releasePath(status);
+      expect(path.length, `${status} から解放できない`).toBeGreaterThan(0);
+      expect(path[path.length - 1]).toBe('released');
+
+      let current = status;
+      for (const next of path) {
+        expect(canTransition(current, next), `${current} → ${next}`).toBe(true);
+        current = next;
+      }
+    }
   });
 });
 

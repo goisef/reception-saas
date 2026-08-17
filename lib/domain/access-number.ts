@@ -29,6 +29,31 @@ export function canTransition(from: AccessNumberStatus, to: AccessNumberStatus):
   return ALLOWED[from].includes(to);
 }
 
+/** 既に誰にも割り当てられていない状態か。解放操作は不要。 */
+export function isFree(status: AccessNumberStatus): boolean {
+  return status === 'available' || status === 'released';
+}
+
+/**
+ * released へ到達するまでに踏むべき状態の列を返す。
+ *
+ * 退出せずに放置された番号（`in_use` のまま予定終了+猶予を過ぎたもの）は
+ * `released` へ直接遷移できない。一度 `expired` を挟むことで、
+ * 「退出して解放された」のか「放置されて期限切れになった」のかを
+ * 履歴と帳票から区別できるようにしている。
+ *
+ * 空配列は「解放の必要がない（既に空き）」を意味する。
+ * 解放できない状態は存在しない — locked も管理者操作で released にできる。
+ */
+export function releasePath(from: AccessNumberStatus): AccessNumberStatus[] {
+  if (isFree(from)) return [];
+  if (canTransition(from, 'released')) return ['released'];
+  if (canTransition(from, 'expired') && canTransition('expired', 'released')) {
+    return ['expired', 'released'];
+  }
+  return [];
+}
+
 export class InvalidNumberTransition extends Error {
   constructor(
     readonly from: AccessNumberStatus,

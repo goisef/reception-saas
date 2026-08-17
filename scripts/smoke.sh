@@ -20,6 +20,9 @@ TERMINAL="Authorization: Bearer $DEVICE_KEY"
 JSON='Content-Type: application/json'
 
 fail=0
+# Idempotency-Key は実行ごとに変える。固定にすると2回目以降の実行で
+# 初回のレスポンスが再生され、スクリプトが再実行できなくなる。
+RUN_ID="$(date +%s)-$$"
 c() { curl -s --noproxy '*' "$@"; }
 pick() { node -e "process.stdout.write(String(JSON.parse(process.argv[1])$2))" "$1"; }
 
@@ -52,12 +55,12 @@ check "更新あり判定" true "$(pick "$VER" '.data.updateAvailable')"
 
 echo "== 4. 予約と冪等性 =="
 BODY="{\"storeId\":\"$STORE\",\"guestName\":\"スモーク太郎\",\"startAt\":\"2030-01-01T01:00:00Z\",\"endAt\":\"2030-01-01T02:00:00Z\",\"reserveNumber\":true}"
-RES=$(c -X POST -H "$ADMIN" -H "$JSON" -H 'Idempotency-Key: smoke-res' -d "$BODY" "$BASE/api/v1/reservations")
+RES=$(c -X POST -H "$ADMIN" -H "$JSON" -H "Idempotency-Key: smoke-res-$RUN_ID" -d "$BODY" "$BASE/api/v1/reservations")
 NUM=$(pick "$RES" '.data.accessNumber')
 QR=$(pick "$RES" '.data.qrToken')
 RID=$(pick "$RES" '.data.id')
 check "4桁番号が確保される" 4 "${#NUM}"
-REPLAY=$(c -o /dev/null -D - -X POST -H "$ADMIN" -H "$JSON" -H 'Idempotency-Key: smoke-res' -d "$BODY" "$BASE/api/v1/reservations" | grep -ci 'idempotency-replayed: true')
+REPLAY=$(c -o /dev/null -D - -X POST -H "$ADMIN" -H "$JSON" -H "Idempotency-Key: smoke-res-$RUN_ID" -d "$BODY" "$BASE/api/v1/reservations" | grep -ci 'idempotency-replayed: true')
 check "同一キーの再送は再生される" 1 "$REPLAY"
 
 echo "== 5. 受付 =="
@@ -77,7 +80,16 @@ check "退出できる" exited "$(pick "$CO" '.data.visit.status')"
 N2=$(c -H "$TERMINAL" "$BASE/api/v1/access-numbers/$NUM?storeId=$STORE")
 check "番号は即解放されず退出済み" exited "$(pick "$N2" '.data.status')"
 SW=$(c -X POST -H "$ADMIN" -H "$JSON" -d "{\"storeId\":\"$STORE\"}" "$BASE/api/v1/access-numbers/sweep")
-check "保持時間内なので解放0件" 0 "$(pick "$SW" '.data.releasedCount')"
+# 解放件数の合計はシードの経過時間で変わる。いま退出した番号が
+# 保持時間内に解放されていないことだけを見る。
+MINE=$(node -e "
+  const d = JSON.parse(process.argv[1]).data;
+  process.stdout.write(String(d.released.some((r) => r.number === process.argv[2])));
+" "$SW" "$NUM")
+check "保持時間内の番号は解放されない" false "$MINE"
+check "スイープが途中で落ちていない" 0 "$(pick "$SW" '.data.failures.length')"
+N3=$(c -H "$TERMINAL" "$BASE/api/v1/access-numbers/$NUM?storeId=$STORE")
+check "退出済みのまま維持される" exited "$(pick "$N3" '.data.status')"
 
 echo "== 7. 帳票 =="
 for FORMAT in csv xlsx json; do

@@ -4,7 +4,9 @@ import { collections, datastore } from '../store';
 import {
   evaluateRelease,
   InvalidNumberTransition,
+  isFree,
   pickAvailableNumber,
+  releasePath,
   shouldRehold,
   transition as applyTransition,
   type ReleaseReason,
@@ -174,11 +176,44 @@ export async function markInUse(
   return saved;
 }
 
+/**
+ * 番号を released まで進める。
+ *
+ * 退出せずに放置された番号は `in_use` のままなので、`released` へ直接は
+ * 遷移できない。`expired` を経由させる（PRD 7-3 の状態一覧に `expired` が
+ * あるのはこのため）。経路の判断はドメイン層の releasePath に委ねる。
+ */
+export async function release(
+  tenantId: Id,
+  numberDoc: AccessNumber,
+  patch: Partial<AccessNumber> = {}
+): Promise<AccessNumber> {
+  const path = releasePath(numberDoc.status);
+  if (path.length === 0) {
+    // 既に空き。解放は冪等な操作なので、エラーにせずそのまま返す。
+    // スイープが同じ番号を二度拾っても失敗扱いにしないため。
+    if (isFree(numberDoc.status)) return numberDoc;
+    throw conflict(`番号 ${numberDoc.number} は ${numberDoc.status} のため解放できません`);
+  }
+
+  const now = new Date().toISOString();
+  let next = numberDoc;
+  for (const status of path) {
+    next = transition(next, status, now, patch);
+  }
+
+  const saved = await collections.accessNumbers().update(tenantId, numberDoc.id, next);
+  if (!saved) throw notFound('アクセス番号');
+  return saved;
+}
+
 export type ReleaseOutcome = {
   released: AccessNumber[];
   /** 固定番号を同じ顧客向けに再確保したもの。解放とは区別する */
   reheld: AccessNumber[];
   reasons: Record<Id, ReleaseReason>;
+  /** 処理できなかった番号。1件の失敗で全体を止めないため個別に記録する */
+  failures: { number: string; error: string }[];
 };
 
 /**
@@ -196,41 +231,51 @@ export async function sweepReleases(
 
   return datastore().withLock(lockKey(storeId), async () => {
     const numbers = await listByStore(tenantId, storeId);
-    const outcome: ReleaseOutcome = { released: [], reheld: [], reasons: {} };
+    const outcome: ReleaseOutcome = { released: [], reheld: [], reasons: {}, failures: [] };
 
     for (const number of numbers) {
-      // 固定番号は解放せず、同じ顧客向けの確保済み状態へ戻す
-      if (shouldRehold(number, store, now)) {
-        outcome.reheld.push(
-          await setStatus(tenantId, number, 'reserved', { visitId: null, exitedAt: null })
-        );
-        continue;
+      // 1件の番号でつまずいても残りは処理する。スイープは定期実行の
+      // バッチなので、1つの異常データで店舗全体の解放が止まると
+      // 番号が枯渇して受付できなくなる。
+      try {
+        // 固定番号は解放せず、同じ顧客向けの確保済み状態へ戻す
+        if (shouldRehold(number, store, now)) {
+          outcome.reheld.push(
+            await setStatus(tenantId, number, 'reserved', { visitId: null, exitedAt: null })
+          );
+          continue;
+        }
+
+        const reservation = number.reservationId
+          ? await collections.reservations().get(tenantId, number.reservationId)
+          : null;
+
+        const decision = evaluateRelease(number, store, {
+          now,
+          reservationStatus: reservation?.status,
+          scheduledEndAt: reservation?.endAt ?? null,
+        });
+        if (!decision.release) continue;
+
+        const released = await release(tenantId, number, {
+          customerIds: [],
+          reservationId: null,
+          visitId: null,
+        });
+        outcome.released.push(released);
+        outcome.reasons[released.id] = decision.reason;
+
+        await webhooks.emit({
+          tenantId,
+          type: 'access_number.released',
+          data: { accessNumber: released, reason: decision.reason },
+        });
+      } catch (error) {
+        outcome.failures.push({
+          number: number.number,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
-
-      const reservation = number.reservationId
-        ? await collections.reservations().get(tenantId, number.reservationId)
-        : null;
-
-      const decision = evaluateRelease(number, store, {
-        now,
-        reservationStatus: reservation?.status,
-        scheduledEndAt: reservation?.endAt ?? null,
-      });
-      if (!decision.release) continue;
-
-      const released = await setStatus(tenantId, number, 'released', {
-        customerIds: [],
-        reservationId: null,
-        visitId: null,
-      });
-      outcome.released.push(released);
-      outcome.reasons[released.id] = decision.reason;
-
-      await webhooks.emit({
-        tenantId,
-        type: 'access_number.released',
-        data: { accessNumber: released, reason: decision.reason },
-      });
     }
 
     return outcome;
@@ -249,7 +294,8 @@ export async function releaseManually(
 
     // 手動解放は固定番号・停止中の番号も対象にする。管理者の明示操作なので、
     // pinned フラグも落として通常の番号に戻す。
-    const released = await setStatus(tenantId, number, 'released', {
+    // 滞在中(in_use)の番号も対象になるため、release() で expired を経由させる。
+    const released = await release(tenantId, number, {
       customerIds: [],
       reservationId: null,
       visitId: null,

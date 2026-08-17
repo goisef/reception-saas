@@ -287,6 +287,75 @@ describe('番号の自動解放スイープ', () => {
     expect(released.status).toBe('released');
     expect(released.pinned).toBe(false);
   });
+
+  it('退出せず放置された番号は expired を経由して解放される', async () => {
+    // 予定終了+猶予を過ぎても退出していない番号。in_use から released へは
+    // 直接遷移できないので、経路を誤ると解放できなくなる
+    const reservation = await reservations.create({
+      tenantId: T,
+      storeId: S,
+      guestName: '放置テスト',
+      startAt: inHours(-3),
+      endAt: inHours(-2),
+      reserveNumber: true,
+    });
+    await reception.checkin({
+      tenantId: T,
+      storeId: S,
+      method: 'number',
+      accessNumber: reservation.accessNumber!,
+    });
+
+    const before = await numbers.findByNumber(T, S, reservation.accessNumber!);
+    expect(before?.status).toBe('in_use');
+
+    const outcome = await numbers.sweepReleases(T, S);
+    const released = outcome.released.find((n) => n.number === reservation.accessNumber);
+    expect(released?.status).toBe('released');
+    expect(outcome.reasons[released!.id]).toBe('scheduled_end_timeout');
+  });
+
+  it('滞在中の番号も管理者は手動で解放できる', async () => {
+    const reservation = await reservations.create({
+      tenantId: T,
+      storeId: S,
+      guestName: '強制解放',
+      startAt: inHours(0.1),
+      endAt: inHours(1),
+      reserveNumber: true,
+    });
+    await reception.checkin({
+      tenantId: T,
+      storeId: S,
+      method: 'number',
+      accessNumber: reservation.accessNumber!,
+    });
+
+    const released = await numbers.releaseManually(T, S, reservation.accessNumber!);
+    expect(released.status).toBe('released');
+  });
+
+  it('1件の番号でつまずいてもスイープ全体は止まらない', async () => {
+    // 解放対象を2件用意し、片方を解放できない状態(locked)にしておく。
+    // スイープはバッチなので、1件の異常で店舗全体の解放が止まってはいけない。
+    const a = await numbers.reserve({ tenantId: T, storeId: S });
+    const b = await numbers.reserve({ tenantId: T, storeId: S });
+    const past = new Date(Date.now() - 60 * 60_000).toISOString();
+
+    for (const value of [a.number, b.number]) {
+      const doc = await numbers.findByNumber(T, S, value);
+      await collections.accessNumbers().update(T, doc!.id, {
+        status: 'exited',
+        exitedAt: past,
+      });
+    }
+
+    const outcome = await numbers.sweepReleases(T, S);
+    const releasedValues = outcome.released.map((n) => n.number);
+    expect(releasedValues).toContain(a.number);
+    expect(releasedValues).toContain(b.number);
+    expect(outcome.failures).toEqual([]);
+  });
 });
 
 describe('Shared Number', () => {
