@@ -19,7 +19,7 @@ const STATUS: Record<
   exited: { label: '退出済み', tone: 'warning' },
   expired: { label: '期限切れ', tone: 'danger' },
   released: { label: '解放済み', tone: 'default' },
-  locked: { label: '固定', tone: 'danger' },
+  locked: { label: '停止中', tone: 'danger' },
 };
 
 export default async function AccessNumbersPage({

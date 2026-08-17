@@ -52,7 +52,7 @@ const NUMBER_STATUS_LABEL: Record<AccessNumber['status'], string> = {
   exited: '退出済み',
   expired: '期限切れ',
   released: '解放済み',
-  locked: '固定',
+  locked: '停止中',
 };
 
 const RESERVATION_STATUS_LABEL: Record<Reservation['status'], string> = {

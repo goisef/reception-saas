@@ -163,8 +163,9 @@ export async function seed(ds: Datastore): Promise<void> {
       visitId: 'vis_0002',
       exitedAt: iso(at(now, 10, 25)),
     }),
-    // VIP 固定番号: 解放対象外
-    accessNumber('acn_0001', DEMO_STORE_OSAKA, '0001', 'locked', now, {
+    // VIP 固定番号: この顧客のために確保し続ける。自動解放の対象外だが、
+    // 受付には使えること（locked は「管理者が停止した番号」で別物）
+    accessNumber('acn_0001', DEMO_STORE_OSAKA, '0001', 'reserved', now, {
       customerIds: ['cus_sato'],
       pinned: true,
     }),

@@ -227,7 +227,9 @@ export default function ReceptionTerminal({
   ) {
     const isBusinessError = error instanceof api.TerminalApiError && error.status < 500;
     if (isBusinessError) {
-      showResult('error', '受付できませんでした', (error as api.TerminalApiError).message);
+      // message は外部連携先の開発者向けなので画面には出さない。
+      // 来店客に見せる文言はサーバーが display で配る。
+      showResult('error', '受付できませんでした', (error as api.TerminalApiError).display);
       return;
     }
 

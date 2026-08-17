@@ -1,4 +1,10 @@
-import { badRequest, conflict, notFound } from '../core/errors';
+import {
+  badRequest,
+  conflict,
+  notFound,
+  TERMINAL_MESSAGE,
+  withDisplay,
+} from '../core/errors';
 import { newId } from '../core/ids';
 import { collections } from '../store';
 import type {
@@ -83,7 +89,10 @@ export async function checkin(input: CheckinInput): Promise<CheckinResult> {
         (v) => v.reservationId === resolved.reservation!.id && v.status === 'in_store'
       );
     if (active[0]) {
-      throw conflict('この予約は既に受付済みです');
+      throw withDisplay(
+        conflict('この予約は既に受付済みです'),
+        TERMINAL_MESSAGE.alreadyCheckedIn
+      );
     }
   }
 
@@ -175,11 +184,19 @@ async function resolveTarget(input: CheckinInput, now: Date): Promise<ResolvedTa
       .reservations()
       .list(input.tenantId, (r) => r.qrToken === input.qrToken);
     const reservation = matches[0];
-    if (!reservation) throw notFound('予約');
+    if (!reservation) throw withDisplay(notFound('予約'), TERMINAL_MESSAGE.qrUnknown);
     if (Date.parse(reservation.qrTokenExpiresAt) < now.getTime()) {
-      throw conflict('QRコードの有効期限が切れています');
+      throw withDisplay(
+        conflict('QRコードの有効期限が切れています'),
+        TERMINAL_MESSAGE.qrExpired
+      );
     }
-    if (reservation.status === 'cancelled') throw conflict('この予約はキャンセルされています');
+    if (reservation.status === 'cancelled') {
+      throw withDisplay(
+        conflict('この予約はキャンセルされています'),
+        TERMINAL_MESSAGE.reservationCancelled
+      );
+    }
     return {
       reservation,
       customerId: reservation.customerId,
@@ -196,9 +213,14 @@ async function resolveTarget(input: CheckinInput, now: Date): Promise<ResolvedTa
       input.storeId,
       input.accessNumber
     );
-    if (!numberDoc) throw notFound('アクセス番号');
+    if (!numberDoc) {
+      throw withDisplay(notFound('アクセス番号'), TERMINAL_MESSAGE.numberUnknown);
+    }
     if (numberDoc.status === 'released' || numberDoc.status === 'available') {
-      throw conflict('この番号は現在使用できません');
+      throw withDisplay(
+        conflict('この番号は現在使用できません'),
+        TERMINAL_MESSAGE.numberUnavailable
+      );
     }
 
     const reservation = numberDoc.reservationId
@@ -278,8 +300,13 @@ export async function checkout(input: CheckoutInput): Promise<CheckoutResult> {
   const nowIso = now.toISOString();
 
   const visit = await findActiveVisit(input);
-  if (!visit) throw notFound('滞在中の来店');
-  if (visit.status === 'exited') throw conflict('この来店は既に退出済みです');
+  if (!visit) throw withDisplay(notFound('滞在中の来店'), TERMINAL_MESSAGE.notInStore);
+  if (visit.status === 'exited') {
+    throw withDisplay(
+      conflict('この来店は既に退出済みです'),
+      TERMINAL_MESSAGE.alreadyExited
+    );
+  }
 
   const updated = await collections.visits().update(input.tenantId, visit.id, {
     status: 'exited',

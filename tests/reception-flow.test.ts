@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { collections, ready } from '@/lib/store';
+import { notFound, TERMINAL_MESSAGE, withDisplay } from '@/lib/core/errors';
 import {
   DEMO_STORE_OSAKA,
   DEMO_TENANT_ID,
@@ -433,5 +434,46 @@ describe('テナント分離', () => {
     });
     expect(await collections.reservations().get('ten_other', reservation.id)).toBeNull();
     expect(await collections.reservations().list('ten_other')).toHaveLength(0);
+  });
+});
+
+describe('受付端末に見せるエラー文言', () => {
+  it('存在しない番号は客向けの文言を返す', async () => {
+    // message は開発者向けなので、そのまま端末に出すと
+    // 「アクセス番号 が見つかりません」が来店客に見えてしまう
+    await expect(
+      reception.checkin({ tenantId: T, storeId: S, method: 'number', accessNumber: '9998' })
+    ).rejects.toMatchObject({
+      code: 'not_found',
+      display: TERMINAL_MESSAGE.numberUnknown,
+    });
+  });
+
+  it('期限切れQRは客向けの文言を返す', async () => {
+    const reservation = await reservations.create({
+      tenantId: T,
+      storeId: S,
+      guestName: '期限切れ文言',
+      startAt: inHours(-3),
+      endAt: inHours(-2),
+    });
+    await expect(
+      reception.checkin({ tenantId: T, storeId: S, method: 'qr', qrToken: reservation.qrToken })
+    ).rejects.toMatchObject({ display: TERMINAL_MESSAGE.qrExpired });
+  });
+
+  it('滞在していない番号での退出も客向けの文言を返す', async () => {
+    await expect(
+      reception.checkout({ tenantId: T, storeId: S, accessNumber: '9997' })
+    ).rejects.toMatchObject({ display: TERMINAL_MESSAGE.notInStore });
+  });
+
+  it('display はエラー応答のJSONに含まれる', () => {
+    const error = withDisplay(notFound('アクセス番号'), TERMINAL_MESSAGE.numberUnknown);
+    expect(error.toJSON().error).toMatchObject({
+      code: 'not_found',
+      message: 'アクセス番号 が見つかりません',
+      display: TERMINAL_MESSAGE.numberUnknown,
+    });
   });
 });

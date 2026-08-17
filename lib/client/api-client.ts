@@ -8,14 +8,25 @@
  */
 
 export type ApiErrorBody = {
-  error: { code: string; message: string; details?: { field: string; message: string }[] };
+  error: {
+    code: string;
+    message: string;
+    /** 来店客に見せる文言。サーバーが決める (PRD 4 Thin Client) */
+    display?: string;
+    details?: { field: string; message: string }[];
+  };
 };
 
 export class TerminalApiError extends Error {
   constructor(
     readonly code: string,
     message: string,
-    readonly status: number
+    readonly status: number,
+    /**
+     * 画面に出す文言。サーバーが display を返さなかった場合のみ
+     * 汎用文言にフォールバックする。message は開発者向けなので出さない。
+     */
+    readonly display: string = 'ただいま受付できません。スタッフにお声がけください。'
   ) {
     super(message);
     this.name = 'TerminalApiError';
@@ -48,7 +59,8 @@ async function parse<T>(response: Response): Promise<T> {
     throw new TerminalApiError(
       body.error?.code ?? 'unknown',
       body.error?.message ?? '通信に失敗しました',
-      response.status
+      response.status,
+      body.error?.display
     );
   }
   return json as T;
