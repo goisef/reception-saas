@@ -184,12 +184,27 @@ export function shouldRehold(
 export const NUMBER_MIN = 0;
 export const NUMBER_MAX = 9999;
 
+/**
+ * 自動払い出しは4桁。来店客が読み上げ・入力する回数が最も多く、
+ * 桁が増えるほど受付が遅くなるため、通常の予約用途では伸ばさない。
+ */
+export const GENERATED_NUMBER_LENGTH = 4;
+
+/**
+ * 受け付ける桁数の範囲 (PRD v3.0 モックアップ: 4〜6桁)。
+ *
+ * VIPの固定番号や全店舗共通番号は、他と衝突しにくくするために
+ * 5〜6桁を手動で割り当てることがある。入力側はこれを受け入れる必要がある。
+ */
+export const NUMBER_MIN_LENGTH = 4;
+export const NUMBER_MAX_LENGTH = 6;
+
 export function formatNumber(value: number): string {
-  return String(value).padStart(4, '0');
+  return String(value).padStart(GENERATED_NUMBER_LENGTH, '0');
 }
 
 export function isValidNumber(value: string): boolean {
-  return /^\d{4}$/.test(value);
+  return new RegExp(`^\\d{${NUMBER_MIN_LENGTH},${NUMBER_MAX_LENGTH}}$`).test(value);
 }
 
 /**

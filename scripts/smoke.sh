@@ -49,7 +49,12 @@ check "/ready" 200 "$(c -o /dev/null -w '%{http_code}' "$BASE/ready")"
 
 echo "== 3. 端末設定とバージョン =="
 CFG=$(c -H "$TERMINAL" -H 'X-Device-Id: dev_osaka_01' "$BASE/api/v1/device/config?storeId=$STORE")
-check "受付ボタンが配られる" 3 "$(pick "$CFG" '.data.buttons.length')"
+# ボタン数は設定で変わる。QRと番号が配られていることを見る
+HAS_CORE=$(node -e "
+  const b = JSON.parse(process.argv[1]).data.buttons.map((x) => x.action);
+  process.stdout.write(String(b.includes('reception.qr') && b.includes('reception.number')));
+" "$CFG")
+check "QRと番号のボタンが配られる" true "$HAS_CORE"
 VER=$(c -H "$TERMINAL" "$BASE/api/v1/device/version?platform=android&version=1.0.0")
 check "更新あり判定" true "$(pick "$VER" '.data.updateAvailable')"
 

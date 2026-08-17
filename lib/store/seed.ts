@@ -427,15 +427,17 @@ function remoteConfig(store: Store, nowIso: string): RemoteConfig & { id: string
     notificationSound: 'chime',
     buttons: [
       { id: 'qr', label: 'QRコードで受付', action: 'reception.qr', visible: true, order: 1 },
-      { id: 'number', label: '4桁番号で受付', action: 'reception.number', visible: true, order: 2 },
-      { id: 'other', label: 'その他の受付', action: 'reception.other', visible: true, order: 3 },
+      { id: 'number', label: '受付番号を入力', action: 'reception.number', visible: true, order: 2 },
+      // 下部の呼び出しボタン。氏名を取らず担当者を呼ぶだけ (PRD 21 業者受付/イベント受付)
+      { id: 'staff', label: '総合受付', action: 'reception.staff', visible: true, order: 3 },
+      { id: 'vendor', label: '業者・配送', action: 'reception.event', visible: true, order: 4 },
     ],
     flags: [
       { key: 'qrReception', enabled: true, rolloutPercent: 100 },
       { key: 'numberReception', enabled: true, rolloutPercent: 100 },
       { key: 'exitNotification', enabled: true, rolloutPercent: 100 },
       { key: 'staffReception', enabled: true, rolloutPercent: 100 },
-      { key: 'eventReception', enabled: false, rolloutPercent: 0 },
+      { key: 'eventReception', enabled: true, rolloutPercent: 100 },
       // P1機能。段階リリースの例として 5% で配信中
       { key: 'faceRecognition', enabled: true, rolloutPercent: 5 },
       { key: 'calendar', enabled: false, rolloutPercent: 0 },

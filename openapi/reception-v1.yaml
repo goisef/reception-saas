@@ -225,7 +225,7 @@ paths:
                 serviceId: { type: string }
                 accessNumber:
                   type: string
-                  pattern: '^\d{4}$'
+                  pattern: '^\d{4,6}$'
                   description: VIP・特定会員向けに固定番号を指定する場合
                 reserveNumber:
                   type: boolean
@@ -274,7 +274,7 @@ paths:
                 status: { $ref: "#/components/schemas/ReservationStatus" }
                 serviceId: { type: string }
                 note: { type: string }
-                accessNumber: { type: string, pattern: '^\d{4}$' }
+                accessNumber: { type: string, pattern: '^\d{4,6}$' }
       responses:
         "200": { description: 更新完了 }
     delete:
@@ -328,7 +328,7 @@ paths:
                   description: method=qr のとき必須。QRには参照トークンのみを載せる
                 accessNumber:
                   type: string
-                  pattern: '^\d{4}$'
+                  pattern: '^\d{4,6}$'
                   description: method=number のとき必須
                 customerId: { type: string }
                 guestName: { type: string }
@@ -396,7 +396,7 @@ paths:
               properties:
                 storeId: { type: string }
                 visitId: { type: string }
-                accessNumber: { type: string, pattern: '^\d{4}$' }
+                accessNumber: { type: string, pattern: '^\d{4,6}$' }
       responses:
         "200":
           description: 退出完了
@@ -471,7 +471,7 @@ paths:
               required: [storeId]
               properties:
                 storeId: { type: string }
-                number: { type: string, pattern: '^\d{4}$' }
+                number: { type: string, pattern: '^\d{4,6}$' }
                 customerIds:
                   type: array
                   items: { type: string }
@@ -489,7 +489,7 @@ paths:
 
   /api/v1/access-numbers/{number}:
     parameters:
-      - { name: number, in: path, required: true, schema: { type: string, pattern: '^\d{4}$' } }
+      - { name: number, in: path, required: true, schema: { type: string, pattern: '^\d{4,6}$' } }
       - { name: storeId, in: query, required: true, schema: { type: string } }
     get:
       tags: [access-numbers]
@@ -970,7 +970,10 @@ components:
         id: { type: string }
         tenantId: { type: string }
         storeId: { type: string }
-        number: { type: string, pattern: '^\d{4}$' }
+        number:
+          type: string
+          pattern: '^\d{4,6}$'
+          description: 自動払い出しは4桁。VIP・全店舗共通は5〜6桁を手動割当することがある
         status: { $ref: "#/components/schemas/AccessNumberStatus" }
         customerIds:
           type: array

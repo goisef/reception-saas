@@ -1,4 +1,9 @@
 import { ApiError, validationFailed, type FieldError } from './errors';
+import {
+  isValidNumber,
+  NUMBER_MAX_LENGTH,
+  NUMBER_MIN_LENGTH,
+} from '../domain/access-number';
 
 /**
  * 依存を増やしたくないので最小限のバリデータを自前で持つ。
@@ -119,8 +124,11 @@ export class Validator {
   accessNumber(field: string, opts: { required?: boolean } = {}) {
     const value = this.string(field, opts);
     if (value === undefined) return undefined;
-    if (!/^\d{4}$/.test(value)) {
-      this.fail(field, '4桁の数字で指定してください');
+    if (!isValidNumber(value)) {
+      this.fail(
+        field,
+        `${NUMBER_MIN_LENGTH}〜${NUMBER_MAX_LENGTH}桁の数字で指定してください`
+      );
       return undefined;
     }
     return value;
