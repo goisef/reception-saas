@@ -23,15 +23,24 @@
     "demo:online": "bash scripts/access-control.sh online",
     "emulator": "firebase emulators:start --only firestore --project demo-reception",
     "test:firestore": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8181 vitest run",
-    "dev:firestore": "RECEPTION_DATASTORE=firestore FIRESTORE_EMULATOR_HOST=127.0.0.1:8181 FIRESTORE_PROJECT_ID=demo-reception next dev"
+    "dev:firestore": "RECEPTION_DATASTORE=firestore FIRESTORE_EMULATOR_HOST=127.0.0.1:8181 FIRESTORE_PROJECT_ID=demo-reception next dev",
+    "cap:sync": "cap sync",
+    "cap:sync:ios": "cap sync ios",
+    "cap:sync:android": "cap sync android",
+    "android:apk": "cap sync android && cd android && ./gradlew assembleRelease",
+    "ios:open": "cap open ios"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/ios": "^8.5.0",
     "@google-cloud/firestore": "^9.0.0",
     "next": "16.2.4",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

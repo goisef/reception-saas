@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ブランド配色。Web 側 (app/globals.css) の slate-900 / indigo と揃える。
+  Capacitor のテンプレートは styles.xml から colorPrimary 等を参照するが
+  定義ファイルを同梱しないため、ここで補う。
+-->
+<resources>
+    <color name="colorPrimary">#0F172A</color>
+    <color name="colorPrimaryDark">#020617</color>
+    <color name="colorAccent">#6366F1</color>
+</resources>

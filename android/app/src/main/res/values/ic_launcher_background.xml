@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- アダプティブアイコンの背景。前景のマークが白なので暗い色にする -->
+    <color name="ic_launcher_background">#0F172A</color>
+</resources>

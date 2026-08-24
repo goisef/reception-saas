@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">受付</string>
+    <string name="title_activity_main">受付</string>
+    <string name="package_name">jp.receptionsaas.terminal</string>
+    <string name="custom_url_scheme">jp.receptionsaas.terminal</string>
+</resources>

@@ -53,3 +53,12 @@ ui-debug.log
 *-service-account*.json
 serviceAccountKey*.json
 .vercel
+
+# 署名鍵・プロビジョニング (PRD 13-4: 開発者PCへ恒久保存しない)
+*.jks
+*.keystore
+*.p12
+*.p8
+*.cer
+*.certSigningRequest
+*.mobileprovision
