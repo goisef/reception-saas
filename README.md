@@ -99,10 +99,13 @@ GCS、キュー基盤、通知の実送信、PDF帳票、顧客アプリ、SaaS�
 
 | 方式 | 優先度 | 状況 |
 | --- | --- | --- |
-| PWA (iPad / Android Tablet / Windows / Mac / Chromebook) | P0 | 実装済み |
+| PWA (iPad / Android Tablet / Windows / Mac / Chromebook) | P0 | 実装済み。iPad はホーム画面追加で全画面起動 |
 | Android APK | P0 | バージョン確認APIのみ。ビルドは未着手 |
 | iOS App / IPA | P1 | 未着手 |
 | App Store | P1 | 未着手 |
+
+iPad での設置手順は端末上の `/reception/setup` が案内します。ホーム画面へ
+追加するとアドレスバーとタブが消え、据え置き端末として使える状態になります。
 
 IPA は CI/CD で生成・署名できる構成にしますが、**Web に置いて誰でも
 インストールできる形にはしません。** iOS では Apple の署名・プロビジョニング・

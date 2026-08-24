@@ -99,7 +99,9 @@ function makePng(size) {
 
 const outDir = path.join(process.cwd(), 'public', 'icons');
 mkdirSync(outDir, { recursive: true });
-for (const size of [192, 512]) {
+// 180 は iOS の apple-touch-icon 用。iOS はホーム画面追加時に
+// manifest の icons を見ないので、この size を別途用意する必要がある。
+for (const size of [180, 192, 512]) {
   const file = path.join(outDir, `icon-${size}.png`);
   writeFileSync(file, makePng(size));
   console.log(`wrote ${file}`);
