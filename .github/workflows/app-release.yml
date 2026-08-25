@@ -1,0 +1,258 @@
+name: App Release
+
+# PRD 17-2 配布:
+#   Android: Build → Sign → APK → Hash → Artifact → 配布
+#   iOS:     Build → Test → Code Sign → IPA → Artifact → TestFlight / App Store
+#
+# 署名鍵・プロビジョニングプロファイル・API Secret は開発者PCへ恒久保存しない
+# (PRD 13-4)。すべて GitHub Environments の Secret から実行時にだけ取り出し、
+# ジョブ終了時に破棄する。
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'どの環境向けに出すか（Secret と接続先サーバーが切り替わる）'
+        type: environment
+        required: true
+      version:
+        description: 'バージョン (例 1.1.0)'
+        type: string
+        required: true
+      platform:
+        description: '出すもの'
+        type: choice
+        options: [both, android, ios]
+        default: both
+      ios_method:
+        description: 'iOS の配布方式'
+        type: choice
+        options: [app-store-connect, ad-hoc, development]
+        default: app-store-connect
+      upload_testflight:
+        description: 'TestFlight へアップロードする'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    if: inputs.platform == 'both' || inputs.platform == 'android'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install
+        run: npm ci
+
+      # 受付画面はアプリに焼き込まない。どのサーバーを見るかだけを埋める。
+      - name: Sync
+        env:
+          RECEPTION_APP_SERVER_URL: ${{ vars.RECEPTION_APP_SERVER_URL }}
+        run: npx cap sync android
+
+      # keystore はここでだけ実体化する。作業ディレクトリではなく
+      # RUNNER_TEMP へ置き、リポジトリへ紛れ込ませない。
+      - name: Restore keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 が未設定です。署名なしAPKは配布できません。"
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      - name: Build APK
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        working-directory: android
+        run: |
+          ./gradlew --no-daemon assembleRelease \
+            -PversionName="${{ inputs.version }}" \
+            -PversionCode="${{ github.run_number }}"
+
+      # PRD 6-2 のリリース管理項目。配布サイトへ載せる SHA-256 をここで確定させる。
+      - name: Collect release info
+        id: info
+        run: |
+          APK=$(find android/app/build/outputs/apk/release -name '*.apk' | head -1)
+          mkdir -p dist
+          cp "$APK" "dist/Reception-v${{ inputs.version }}.apk"
+          SHA=$(sha256sum "dist/Reception-v${{ inputs.version }}.apk" | cut -d' ' -f1)
+          {
+            echo "## Android APK"
+            echo ""
+            echo "| 項目 | 値 |"
+            echo "| --- | --- |"
+            echo "| Version | ${{ inputs.version }} |"
+            echo "| Build Number | ${{ github.run_number }} |"
+            echo "| Commit | ${{ github.sha }} |"
+            echo "| Minimum OS | Android 7.0 (API 24) |"
+            echo "| SHA-256 | \`$SHA\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Remove keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reception-android-${{ inputs.version }}
+          path: dist/*.apk
+          retention-days: 30
+
+  ios:
+    if: inputs.platform == 'both' || inputs.platform == 'ios'
+    # IPA のビルドと署名は macOS でしかできない
+    runs-on: macos-15
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Sync
+        env:
+          RECEPTION_APP_SERVER_URL: ${{ vars.RECEPTION_APP_SERVER_URL }}
+        run: npx cap sync ios
+
+      # 証明書とプロファイルは一時キーチェーンに入れ、必ず後段で捨てる。
+      - name: Import signing assets
+        env:
+          CERT_BASE64: ${{ secrets.APPLE_DISTRIBUTION_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_CERT_PASSWORD }}
+          PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          if [ -z "$CERT_BASE64" ] || [ -z "$PROFILE_BASE64" ]; then
+            echo "::error::Apple の証明書またはプロビジョニングプロファイルが未設定です。"
+            exit 1
+          fi
+
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 900 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+
+          echo "$CERT_BASE64" | base64 -d > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERT_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+          PROFILES="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILES"
+          echo "$PROFILE_BASE64" | base64 -d > "$PROFILES/reception.mobileprovision"
+
+      - name: Write export options
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>${{ inputs.ios_method }}</string>
+            <key>teamID</key>
+            <string>${{ secrets.APPLE_TEAM_ID }}</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>stripSwiftSymbols</key>
+            <true/>
+            <key>uploadSymbols</key>
+            <true/>
+          </dict>
+          </plist>
+          PLIST
+
+      - name: Archive
+        working-directory: ios/App
+        run: |
+          xcodebuild -project App.xcodeproj -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            MARKETING_VERSION="${{ inputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" \
+            CODE_SIGN_STYLE=Manual \
+            archive
+
+      - name: Export IPA
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export"
+          mkdir -p dist
+          cp "$RUNNER_TEMP/export"/*.ipa "dist/Reception-v${{ inputs.version }}.ipa"
+
+      # PRD 6-3 のリリース管理項目
+      - name: Collect release info
+        run: |
+          {
+            echo "## iOS IPA"
+            echo ""
+            echo "| 項目 | 値 |"
+            echo "| --- | --- |"
+            echo "| Version | ${{ inputs.version }} |"
+            echo "| Build Number | ${{ github.run_number }} |"
+            echo "| Commit SHA | ${{ github.sha }} |"
+            echo "| Signing Profile | ${{ inputs.ios_method }} |"
+            echo "| Minimum iOS | 15.0 |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload to TestFlight
+        if: inputs.upload_testflight
+        env:
+          KEY_ID: ${{ secrets.APPSTORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPSTORE_CONNECT_ISSUER_ID }}
+          PRIVATE_KEY: ${{ secrets.APPSTORE_CONNECT_PRIVATE_KEY_BASE64 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/private_keys"
+          echo "$PRIVATE_KEY" | base64 -d > "$RUNNER_TEMP/private_keys/AuthKey_${KEY_ID}.p8"
+          API_PRIVATE_KEYS_DIR="$RUNNER_TEMP/private_keys" \
+          xcrun altool --upload-app -f "dist/Reception-v${{ inputs.version }}.ipa" \
+            --type ios --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID"
+          rm -rf "$RUNNER_TEMP/private_keys"
+
+      # 鍵をランナーへ残さない。ジョブが落ちても必ず通す。
+      - name: Clean signing assets
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
+          rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/reception.mobileprovision"
+          rm -rf "$RUNNER_TEMP/private_keys"
+
+      # IPA は誰でも入れられる形で公開しない (PRD 6-3)。
+      # Artifact は取得にリポジトリ権限が要るため、社内受け渡し用に留める。
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reception-ios-${{ inputs.version }}
+          path: dist/*.ipa
+          retention-days: 30

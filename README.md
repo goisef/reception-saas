@@ -100,17 +100,24 @@ GCS、キュー基盤、通知の実送信、PDF帳票、顧客アプリ、SaaS�
 | 方式 | 優先度 | 状況 |
 | --- | --- | --- |
 | PWA (iPad / Android Tablet / Windows / Mac / Chromebook) | P0 | 実装済み。iPad はホーム画面追加で全画面起動 |
-| Android APK | P0 | バージョン確認APIのみ。ビルドは未着手 |
-| iOS App / IPA | P1 | 未着手 |
+| Android APK | P0 | プロジェクトと CI 実装済み。署名鍵の登録待ち |
+| iOS App / IPA | P1 | プロジェクトと CI 実装済み。Apple Developer 登録待ち |
 | App Store | P1 | 未着手 |
 
-iPad での設置手順は端末上の `/reception/setup` が案内します。ホーム画面へ
-追加するとアドレスバーとタブが消え、据え置き端末として使える状態になります。
+iPad で使うだけならアプリは要りません。端末で `/reception/setup` を開くと
+ホーム画面への追加手順が出ます。追加するとアドレスバーとタブが消え、
+据え置き端末として使える状態になります。
 
-IPA は CI/CD で生成・署名できる構成にしますが、**Web に置いて誰でも
-インストールできる形にはしません。** iOS では Apple の署名・プロビジョニング・
-配布方式に従う必要があるため、用途に応じて TestFlight / Ad Hoc /
+ネイティブアプリ（`android/` `ios/`）は Capacitor で作った薄い殻で、
+受付画面はサーバーから読み込みます。**ボタンの文言を変えるのに審査は
+要りません。** 接続先はビルド時に `RECEPTION_APP_SERVER_URL` で決めます。
+
+IPA は CI/CD で生成・署名できますが、**Web に置いて誰でもインストール
+できる形にはしません。** iOS では Apple の署名・プロビジョニング・配布方式に
+従う必要があるため、用途に応じて TestFlight / Ad Hoc /
 Apple Business Manager / App Store を使い分けます。
+
+手順とビルドに必要な Secret は [`docs/APP-RELEASE.md`](./docs/APP-RELEASE.md)。
 
 ---
 
@@ -122,6 +129,7 @@ Apple Business Manager / App Store を使い分けます。
 | [`docs/ROADMAP.md`](./docs/ROADMAP.md) | Step 1〜9 の開発計画と進捗 |
 | [`docs/DEVELOPMENT.md`](./docs/DEVELOPMENT.md) | 開発ガイド・ディレクトリ構成・設計上の約束 |
 | [`docs/HOSTING-FREE.md`](./docs/HOSTING-FREE.md) | **無料で共有URLを立てる**（Vercel + Firestore） |
+| [`docs/APP-RELEASE.md`](./docs/APP-RELEASE.md) | APK / IPA のビルド・署名・配布 |
 | [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) | Cloud Run へのデプロイ手順（本番想定） |
 | [`openapi/reception-v1.yaml`](./openapi/reception-v1.yaml) | API 仕様（単一の正） |
 

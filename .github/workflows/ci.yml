@@ -39,6 +39,44 @@ jobs:
       - name: Build
         run: npm run build
 
+  # ネイティブプロジェクトは普段ビルドしないので壊れても気付けない。
+  # 設定の生成だけは毎回通し、capacitor.config.ts の破損や
+  # webDir の消失をここで拾う。実機ビルドは app-release.yml。
+  native-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Sync native projects
+        env:
+          RECEPTION_APP_SERVER_URL: https://ci.invalid
+        run: npx cap sync
+
+      - name: 生成された設定を確認
+        run: |
+          for f in android/app/src/main/assets/capacitor.config.json ios/App/App/capacitor.config.json; do
+            test -f "$f" || { echo "::error::$f が生成されていません"; exit 1; }
+            grep -q 'https://ci.invalid' "$f" || { echo "::error::$f に server.url が入っていません"; exit 1; }
+          done
+          test -f android/app/src/main/assets/public/offline.html
+          test -f ios/App/App/public/offline.html
+
+      # 平文HTTPを許す設定でリリースされると受付データが素で流れる
+      - name: 平文HTTPが有効になっていないか
+        run: |
+          if grep -q '"cleartext": *true' android/app/src/main/assets/capacitor.config.json; then
+            echo "::error::cleartext が有効です"
+            exit 1
+          fi
+
   security-scan:
     runs-on: ubuntu-latest
     steps:

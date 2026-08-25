@@ -31,9 +31,16 @@ npm start          # 本番サーバー
 npm run lint       # ESLint
 npm run typecheck  # tsc --noEmit
 npm test           # Vitest
-npm run icons      # PWA アイコンの再生成
+npm run icons      # アイコン・スプラッシュの再生成（PWA + ネイティブ）
 npm run docker:build && npm run docker:run   # コンテナで起動
+
+# ネイティブアプリ（接続先の指定が必須）
+RECEPTION_APP_SERVER_URL=https://... npm run cap:sync
+npm run android:apk   # 要 Android SDK
+npm run ios:open      # 要 Mac + Xcode
 ```
+
+APK / IPA の配布は [`APP-RELEASE.md`](./APP-RELEASE.md) を参照してください。
 
 ## API を叩く
 
@@ -123,7 +130,17 @@ app/
 
 tests/                  Vitest
 scripts/                アイコン生成 / スモークテスト
+
+capacitor.config.ts     ネイティブシェルの設定（接続先はビルド時に注入）
+native/www/             アプリに同梱する唯一の画面（オフライン時の案内）
+android/                Capacitor が生成した Android プロジェクト
+ios/                    Capacitor が生成した Xcode プロジェクト
 ```
+
+`android/` と `ios/` はコミットしていますが、`cap sync` が生成する
+`capacitor.config.json` と `public/` は Git 管理外です。接続先が
+コミットに焼き付かないようにするためで、チェックアウト後は一度
+`cap sync` を通す必要があります。
 
 ## 設計上の約束
 

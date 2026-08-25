@@ -6,10 +6,10 @@ PRD: [`PRD.md`](./PRD.md) / デプロイ: [`DEPLOYMENT.md`](./DEPLOYMENT.md)
 | --- | --- | --- | --- |
 | 1 | PWA + API + 管理Web | P0 | 実装中 |
 | 2 | 帳票 + 多店舗 + 権限 | P0 | 実装中 |
-| 3 | Android APK | P0/P1 | 未着手 |
+| 3 | Android APK | P0/P1 | 実装中 |
 | 4 | Google / Outlook Calendar | P1 | 未着手 |
 | 5 | 外部API / Webhook | P0 | 実装中 |
-| 6 | iOS / IPA CI/CD | P1 | 未着手 |
+| 6 | iOS / IPA CI/CD | P1 | 実装中 |
 | 7 | 顔認証PoC | P1 | 未着手 |
 | 8 | 業務委託者入退館 | P1 | 未着手 |
 | 9 | AI / Analytics | P2 | 未着手 |
@@ -48,7 +48,9 @@ PRD: [`PRD.md`](./PRD.md) / デプロイ: [`DEPLOYMENT.md`](./DEPLOYMENT.md)
 
 - [x] `GET /api/v1/device/version` によるバージョン確認・強制アップデート
 - [x] リリースレジストリ（Version / Build / SHA-256 / Minimum OS / Required Update）
-- [ ] APKビルド・署名パイプライン
+- [x] Capacitor による Android プロジェクト（`android/`）
+- [x] APKビルド・署名パイプライン（`.github/workflows/app-release.yml`）
+- [ ] 実機での起動確認（署名鍵の登録後）
 - [ ] 公式ダウンロードサイト
 
 ## Step 4 — Calendar 連携
@@ -71,10 +73,12 @@ PRD: [`PRD.md`](./PRD.md) / デプロイ: [`DEPLOYMENT.md`](./DEPLOYMENT.md)
 
 ## Step 6 — iOS / IPA CI/CD
 
-- [ ] Xcode プロジェクト（WKWebView シェル or ネイティブ Thin Client）
-- [ ] Build → Test → Code Sign → IPA → Artifact
-- [ ] TestFlight 配信
-- [ ] 署名鍵を Secret Manager 管理（開発者PCへ恒久保存しない）
+- [x] Xcode プロジェクト（Capacitor の Thin Client シェル / `ios/`）
+- [x] iPad の PWA 対応（ホーム画面追加で全画面起動 / `/reception/setup`）
+- [x] Build → Code Sign → IPA → Artifact（macOS ランナー）
+- [x] TestFlight アップロード（App Store Connect API キー）
+- [x] 署名鍵を CI Secret 管理（開発者PCへ恒久保存しない）
+- [ ] 実機ビルドの確認（Apple Developer Program 登録後）
 
 ## Step 7 — 顔認証PoC
 
