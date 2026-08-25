@@ -14,13 +14,22 @@ npm run dev
 | --- | --- |
 | http://localhost:3000/ | トップ（各画面への入口） |
 | http://localhost:3000/reception | 受付端末 PWA |
-| http://localhost:3000/admin | 管理Web |
+| http://localhost:3000/admin | 管理Web（要ログイン） |
+| http://localhost:3000/admin/login | 管理Webのログイン |
 | http://localhost:3000/health | Liveness |
 | http://localhost:3000/ready | Readiness |
 | http://localhost:3000/api/v1/openapi | OpenAPI 仕様 |
 
 起動時に in-memory ストアへデモデータ（1テナント / 2店舗 / 顧客5名 / 予約5件）が
 投入されます。`RECEPTION_SEED=0` でシードを止められます。
+
+管理Webの開発用ログイン（シードに含まれる。パスワードは共通で `reception-dev`）:
+
+| メールアドレス | ロール | 見え方 |
+| --- | --- | --- |
+| `admin@example.com` | TenantAdmin | 全店舗・全操作 |
+| `osaka@example.com` | StoreManager | 大阪店のみ |
+| `viewer@example.com` | Viewer | 閲覧のみ |
 
 ## コマンド
 
@@ -97,6 +106,10 @@ bash scripts/smoke.sh
 | `RECEPTION_STORE_ID` | `sto_osaka` | 受付端末の店舗 |
 | `RECEPTION_DEVICE_ID` | `dev_osaka_01` | 受付端末の識別子 |
 | `RECEPTION_SEED` | 有効 | `0` でシードを止める |
+| `RECEPTION_ADMIN_SESSION_SECRET` | 開発用固定値 | 管理Webセッションの署名鍵。本番で未設定なら起動を止める |
+| `RECEPTION_DEMO_ADMIN_EMAIL` | `admin@example.com` | 開発用ログイン |
+| `RECEPTION_DEMO_ADMIN_PASSWORD` | `reception-dev` | 開発用ログイン |
+| `RECEPTION_APP_SERVER_URL` | なし | ネイティブアプリの接続先。`cap sync` で必須 |
 | `PORT` | `3000` | 待ち受けポート（Cloud Run では 8080） |
 
 ## ディレクトリ構成
@@ -119,7 +132,10 @@ lib/
   export/               CSV / xlsx / JSON と非同期ジョブ
   api/handler.ts        ルートハンドラ共通処理
   client/               受付端末から API を叩くクライアント
-  admin/session.ts      管理Webのセッション（要差し替え）
+  admin/                管理Webのログイン
+    password.ts         PBKDF2 によるパスワード保管
+    token.ts            署名付きセッション（Edge から検証する）
+    session.ts          セッションの取得・ログイン・権限判定
 
 app/
   api/v1/               API v1
@@ -155,12 +171,14 @@ ios/                    Capacitor が生成した Xcode プロジェクト
 - **Server Action でも権限を確認する。** 管理画面から呼ばれるから安全、
   という前提は置かない（Zero Trust）。
 - **端末に判定を持たせない。** 表示文言もボタン構成も機能ON/OFFもサーバーが決める。
+- **セッショントークンに権限を入れない。** ロールと店舗範囲は毎回データストアから
+  引く。権限を落としたのに古い Cookie で操作できる、という穴を残さない。
 
 ## 未実装（本番までに必要なもの）
 
 | 項目 | 内容 |
 | --- | --- |
-| 管理Webの認証 | `lib/admin/session.ts` が開発用スタブ |
+| 管理ユーザーの管理画面 | 招待・パスワード変更・停止をシード以外から行えない |
 | Rate Limit の共有ストア | 単一プロセス前提。全リクエストで書き込みが発生するため、あえて Firestore に載せていない（`lib/security/rate-limit.ts` の説明を参照） |
 | Storage | 帳票をメモリに置いている。GCS + 署名付きURLへ |
 | キュー基盤 | Webhook / 帳票 / 通知のワーカーを手動エンドポイントで代用中 |

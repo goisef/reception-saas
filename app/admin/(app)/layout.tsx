@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { currentSession } from '@/lib/admin/session';
+import { signOutAction } from '../login/actions';
 
 const NAV = [
   { href: '/admin', label: 'ダッシュボード' },
@@ -22,11 +23,22 @@ export default async function AdminLayout({ children }: { children: ReactNode })
           <Link href="/admin" className="text-lg font-semibold">
             Reception 管理
           </Link>
-          <div className="text-sm text-slate-500">
-            {session.displayName}
-            <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs">
-              {session.role}
+          <div className="flex items-center gap-3 text-sm text-slate-500">
+            <span>
+              {session.displayName}
+              <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs">
+                {session.role}
+              </span>
             </span>
+            {/* 共有端末で開かれることがある。すぐ閉じられるようにしておく */}
+            <form action={signOutAction}>
+              <button
+                type="submit"
+                className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+              >
+                ログアウト
+              </button>
+            </form>
           </div>
         </div>
         <nav className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 pb-2">

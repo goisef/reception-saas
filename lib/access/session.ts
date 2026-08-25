@@ -25,10 +25,19 @@ function toBase64Url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function fromBase64Url(value: string): Uint8Array<ArrayBuffer> {
+/**
+ * 壊れた Cookie で例外を投げない。ここは全リクエストで通るので、
+ * base64 として読めない値で落ちるとサイト全体が 500 になる。
+ */
+function fromBase64Url(value: string): Uint8Array<ArrayBuffer> | null {
   const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
   const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
-  const binary = atob(padded);
+  let binary: string;
+  try {
+    binary = atob(padded);
+  } catch {
+    return null;
+  }
   // ArrayBuffer を明示的に確保する。長さだけ渡すと ArrayBufferLike 扱いになり、
   // crypto.subtle が要求する BufferSource として受け付けられない。
   const bytes = new Uint8Array(new ArrayBuffer(binary.length));
@@ -69,13 +78,11 @@ export async function verifyToken(
   const expiresAt = Number(payload);
   if (!Number.isFinite(expiresAt) || expiresAt * 1000 < now) return false;
 
+  const signatureBytes = fromBase64Url(signature);
+  if (!signatureBytes) return false;
+
   const key = await hmacKey(secret);
-  return crypto.subtle.verify(
-    'HMAC',
-    key,
-    fromBase64Url(signature),
-    encoder().encode(payload)
-  );
+  return crypto.subtle.verify('HMAC', key, signatureBytes, encoder().encode(payload));
 }
 
 /** タイミング差で正解パスワードを推測されないよう、長さに依らず一定時間で比較する。 */

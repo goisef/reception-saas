@@ -267,6 +267,30 @@ export type Role =
   | 'ReceptionOnly'
   | 'Viewer';
 
+/**
+ * 管理Webにログインする人 (PRD 15)。
+ *
+ * API を叩く外部システム (ApiClient) とは別に持つ。
+ * 片方を止めてももう片方が生きていてほしい——連携先のキーを失効させた瞬間に
+ * 店舗スタッフがログインできなくなる、という事故を構造的に避ける。
+ */
+export type AdminUser = {
+  id: Id;
+  tenantId: Id;
+  /** ログインID。テナント内で一意 */
+  email: string;
+  displayName: string;
+  role: Role;
+  /** 空なら全店舗。AreaManager / StoreManager では絞られる */
+  storeIds: Id[];
+  /** 平文もハッシュ元も保存しない。PBKDF2 の派生鍵のみ (PRD 13-4) */
+  passwordHash: string;
+  status: 'active' | 'suspended';
+  lastLoginAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Scope =
   | 'customers:read'
   | 'customers:write'

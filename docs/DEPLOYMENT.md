@@ -15,11 +15,21 @@ Cloud Load Balancer → WAF → API Gateway → Cloud Run → Application → Fi
 
 | 穴 | 何が起きるか | 対応 |
 | --- | --- | --- |
-| データストアが in-memory | インスタンス再起動・スケールアウトでデータが消える／インスタンス間で食い違う | `lib/store/index.ts` の `createDatastore()` に Firestore ドライバを実装 |
-| Rate Limit がプロセス内 | インスタンス数だけ上限が増える。実質的に制限が効かない | Memorystore(Redis) 実装へ差し替え |
-| Idempotency がプロセス内 | 再送が別インスタンスに当たると二重登録になる | 同上 |
+| Rate Limit がプロセス内 | インスタンス数だけ上限が増える。実質的に制限が効かない | Cloud Armor か Memorystore(Redis) へ（`lib/security/rate-limit.ts` に判断の経緯） |
 | 帳票がメモリ上 | 生成したインスタンス以外からダウンロードできない | GCS + 署名付きURL へ |
-| 管理Webの認証がスタブ | `/admin` に誰でも入れる | `lib/admin/session.ts` を実際のログインへ差し替え |
+| 管理ユーザーを画面から作れない | 招待・パスワード変更・停止がシード経由でしかできない | 管理ユーザー画面の実装 |
+
+塞ぎ済み: データストア（Firestore ドライバ）、Idempotency（共有ストア）、
+管理Webの認証（PBKDF2 + 署名付きセッション）。
+
+### 必ず設定する環境変数
+
+| 変数 | 未設定だと |
+| --- | --- |
+| `RECEPTION_DATASTORE=firestore` | in-memory のまま動き、インスタンス再起動でデータが消える |
+| `RECEPTION_SEED=0` | デモデータと開発用ログインが本番に入る |
+| `RECEPTION_ADMIN_SESSION_SECRET` | 管理Webのセッションを偽造できる。本番では起動を止める |
+| `RECEPTION_ACCESS_PASSWORD` | 共有URLの目隠しが無効になる（本番公開時は意図的に外す） |
 
 `minScale: 1` / `maxScale: 1` にすれば単一インスタンスで動きますが、
 それは**デモ用の運用**です。実店舗のデータを入れる前に上記を塞いでください。
@@ -52,11 +62,42 @@ gcloud artifacts repositories create reception \
 # 受付端末用のAPIキー
 printf 'rk_live_xxxxxxxx' | gcloud secrets create reception-device-api-key --data-file=-
 
+# 管理Webのセッション署名鍵。値は生成し、手元に残さない
+openssl rand -base64 32 \
+  | gcloud secrets create reception-admin-session-secret --data-file=-
+
 # Cloud Run のサービスアカウントに読み取り権限を与える
-gcloud secrets add-iam-policy-binding reception-device-api-key \
-  --member=serviceAccount:SERVICE_ACCOUNT@PROJECT_ID.iam.gserviceaccount.com \
-  --role=roles/secretmanager.secretAccessor
+for SECRET in reception-device-api-key reception-admin-session-secret; do
+  gcloud secrets add-iam-policy-binding "$SECRET" \
+    --member=serviceAccount:SERVICE_ACCOUNT@PROJECT_ID.iam.gserviceaccount.com \
+    --role=roles/secretmanager.secretAccessor
+done
 ```
+
+署名鍵を差し替えると、その時点の管理Webのセッションはすべて失効します。
+鍵が漏れた疑いがあるときは新しい版を作って再デプロイしてください。
+
+### 最初の管理ユーザー
+
+本番は `RECEPTION_SEED=0` のためシードが走らず、管理ユーザーが1人もいません。
+初回だけ環境変数で1人作ります。
+
+```bash
+gcloud run services update reception-saas --region=$REGION \
+  --set-env-vars RECEPTION_BOOTSTRAP_ADMIN_EMAIL=you@example.com \
+  --set-env-vars RECEPTION_BOOTSTRAP_ADMIN_PASSWORD='生成した長いパスワード'
+```
+
+起動時に**管理ユーザーが1人もいないときだけ** TenantAdmin を1人作ります。
+ログインできることを確認したら、環境変数を外してください。
+
+```bash
+gcloud run services update reception-saas --region=$REGION \
+  --remove-env-vars RECEPTION_BOOTSTRAP_ADMIN_EMAIL,RECEPTION_BOOTSTRAP_ADMIN_PASSWORD
+```
+
+外し忘れても、既に利用者がいれば何もしません。2人目以降は管理Webから
+招待する想定ですが、その画面はまだありません。
 
 ## 3. ビルドとデプロイ
 

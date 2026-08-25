@@ -1,7 +1,9 @@
 import { GLOBAL_TENANT, type Datastore } from './datastore';
 import { sha256Hex, newToken } from '../core/ids';
+import { hashPassword } from '../admin/password';
 import type {
   AccessNumber,
+  AdminUser,
   ApiClient,
   AppRelease,
   Customer,
@@ -30,6 +32,17 @@ export const DEMO_STORE_UMEDA = 'sto_umeda';
  * 平文はここでしか登場しない。本番は Secret Manager から供給する。
  */
 export const DEMO_API_KEY = process.env.RECEPTION_DEMO_API_KEY ?? 'rk_dev_demo_tenant_key';
+
+/**
+ * 開発用の管理Webログイン。
+ *
+ * 本番はここを通さない（RECEPTION_SEED=0）。共有環境へ出す場合は
+ * 必ず環境変数で上書きし、既定値のまま公開しないこと。
+ */
+export const DEMO_ADMIN_EMAIL =
+  process.env.RECEPTION_DEMO_ADMIN_EMAIL ?? 'admin@example.com';
+export const DEMO_ADMIN_PASSWORD =
+  process.env.RECEPTION_DEMO_ADMIN_PASSWORD ?? 'reception-dev';
 export const DEMO_RECEPTION_KEY =
   process.env.RECEPTION_DEMO_DEVICE_KEY ?? 'rk_dev_reception_terminal_key';
 
@@ -251,6 +264,51 @@ async function insertSeedData(ds: Datastore): Promise<void> {
     },
   ];
   for (const c of apiClients) await ds.collection<ApiClient>('api_clients').insert(c);
+
+  // 管理Webのログイン。役割ごとに1人ずつ入れて、権限の出し分けを
+  // ログインし直すだけで確認できるようにする。
+  const adminUsers: AdminUser[] = [
+    {
+      id: 'usr_demo_admin',
+      tenantId: DEMO_TENANT_ID,
+      email: DEMO_ADMIN_EMAIL,
+      displayName: 'デモ管理者',
+      role: 'TenantAdmin',
+      storeIds: [],
+      passwordHash: await hashPassword(DEMO_ADMIN_PASSWORD),
+      status: 'active',
+      lastLoginAt: null,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    },
+    {
+      id: 'usr_demo_store_manager',
+      tenantId: DEMO_TENANT_ID,
+      email: 'osaka@example.com',
+      displayName: '大阪店 店長',
+      role: 'StoreManager',
+      storeIds: [DEMO_STORE_OSAKA],
+      passwordHash: await hashPassword(DEMO_ADMIN_PASSWORD),
+      status: 'active',
+      lastLoginAt: null,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    },
+    {
+      id: 'usr_demo_viewer',
+      tenantId: DEMO_TENANT_ID,
+      email: 'viewer@example.com',
+      displayName: '閲覧のみ',
+      role: 'Viewer',
+      storeIds: [],
+      passwordHash: await hashPassword(DEMO_ADMIN_PASSWORD),
+      status: 'active',
+      lastLoginAt: null,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    },
+  ];
+  for (const u of adminUsers) await ds.collection<AdminUser>('admin_users').insert(u);
 
   const releases: (AppRelease & { tenantId: string })[] = [
     {

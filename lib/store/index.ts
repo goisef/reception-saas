@@ -1,6 +1,7 @@
 import { MemoryDatastore, type Collection, type Datastore } from './datastore';
 import type {
   AccessNumber,
+  AdminUser,
   ApiClient,
   AppRelease,
   AuditLog,
@@ -17,7 +18,8 @@ import type {
   WebhookEndpoint,
 } from '../domain/types';
 import type { IdempotencyRecord } from '../security/idempotency';
-import { seed } from './seed';
+import { seed, DEMO_TENANT_ID } from './seed';
+import { bootstrapAdmin } from '../admin/bootstrap';
 
 /**
  * データストアのシングルトン。
@@ -56,7 +58,10 @@ function bootstrap() {
   const g = globalThis as GlobalWithStore;
   if (!g[GLOBAL_KEY]) {
     const datastore = createDatastore();
-    g[GLOBAL_KEY] = { datastore, seeded: seed(datastore) };
+    // シードを止めた本番でも、管理ユーザーが0人のときだけ初期管理者を作れるようにする
+    const tenantId = process.env.RECEPTION_TENANT_ID ?? DEMO_TENANT_ID;
+    const seeded = seed(datastore).then(() => bootstrapAdmin(datastore, tenantId));
+    g[GLOBAL_KEY] = { datastore, seeded };
   }
   return g[GLOBAL_KEY]!;
 }
@@ -82,6 +87,8 @@ export const collections = {
     datastore().collection<RemoteConfig & { id: string }>('remote_configs'),
   appReleases: () => datastore().collection<AppRelease & { tenantId: string }>('app_releases'),
   apiClients: () => datastore().collection<ApiClient>('api_clients'),
+  // 管理Webにログインする人。API を叩く外部システム (apiClients) とは別に持つ
+  adminUsers: () => datastore().collection<AdminUser>('admin_users'),
   auditLogs: () => datastore().collection<AuditLog>('audit_logs'),
   webhookEndpoints: () => datastore().collection<WebhookEndpoint>('webhook_endpoints'),
   webhookDeliveries: () => datastore().collection<WebhookDelivery>('webhook_deliveries'),

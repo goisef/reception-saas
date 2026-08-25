@@ -62,3 +62,12 @@ describe('パスワード照合', () => {
     expect(await passwordMatches('short', 'a-much-longer-password')).toBe(false);
   });
 });
+
+describe('壊れた Cookie', () => {
+  it('base64 として読めない値でも例外を投げない', async () => {
+    // Cookie が1つ壊れただけでサイト全体が 500 になるのを防ぐ
+    for (const broken of ['x', 'a.あ', '..', 'payload.###']) {
+      expect(await verifyToken('secret', broken)).toBe(false);
+    }
+  });
+});

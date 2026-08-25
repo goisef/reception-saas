@@ -41,11 +41,20 @@ spec:
             # 本番にデモデータを入れない
             - name: RECEPTION_SEED
               value: "0"
+            # データを永続化する。未設定だと in-memory のまま動いてしまう
+            - name: RECEPTION_DATASTORE
+              value: firestore
             # 署名鍵・APIシークレットは Secret Manager から (PRD 13-4)
             - name: RECEPTION_DEVICE_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: reception-device-api-key
+                  key: latest
+            # 管理Webのセッション署名鍵。これが漏れると誰でも管理者になれる
+            - name: RECEPTION_ADMIN_SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: reception-admin-session-secret
                   key: latest
           resources:
             limits:
