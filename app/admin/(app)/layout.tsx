@@ -1,10 +1,10 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { currentSession } from '@/lib/admin/session';
-import { ROLE_LABEL, canManageUsers } from '@/lib/admin/policy';
+import { ROLE_LABEL, canManageFeatures, canManageUsers } from '@/lib/admin/policy';
 import { signOutAction } from '../login/actions';
 
-const NAV: { href: string; label: string; adminOnly?: boolean }[] = [
+const NAV: { href: string; label: string; need?: 'users' | 'features' }[] = [
   { href: '/admin', label: 'ダッシュボード' },
   { href: '/admin/reservations', label: '予約' },
   { href: '/admin/visits', label: '来店・退出' },
@@ -12,7 +12,8 @@ const NAV: { href: string; label: string; adminOnly?: boolean }[] = [
   { href: '/admin/access-numbers', label: '番号' },
   { href: '/admin/exports', label: '帳票' },
   { href: '/admin/settings', label: '端末設定' },
-  { href: '/admin/users', label: '利用者', adminOnly: true },
+  { href: '/admin/users', label: '利用者', need: 'users' },
+  { href: '/admin/features', label: '機能管理', need: 'features' },
 ];
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
@@ -44,7 +45,11 @@ export default async function AdminLayout({ children }: { children: ReactNode })
           </div>
         </div>
         <nav className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 pb-2">
-          {NAV.filter((item) => !item.adminOnly || canManageUsers(session.role)).map((item) => (
+          {NAV.filter(
+            (item) =>
+              (item.need !== 'users' || canManageUsers(session.role)) &&
+              (item.need !== 'features' || canManageFeatures(session.role))
+          ).map((item) => (
             <Link
               key={item.href}
               href={item.href}

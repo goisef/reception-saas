@@ -6,6 +6,7 @@ import { forbidden } from '@/lib/core/errors';
 import { newRequestId } from '@/lib/core/ids';
 import * as audit from '@/lib/security/audit';
 import * as remoteConfig from '@/lib/services/remote-config';
+import { mergeFlags } from '@/lib/services/flag-form';
 import { ready } from '@/lib/store';
 import type { FeatureFlag, ReceptionButton } from '@/lib/domain/types';
 
@@ -35,13 +36,10 @@ export async function saveConfigAction(formData: FormData) {
     order: Number(formData.get(`button.${button.id}.order`) ?? button.order),
   }));
 
-  const flags: FeatureFlag[] = current.flags.map((flag) => ({
-    ...flag,
-    enabled: formData.get(`flag.${flag.key}.enabled`) === 'on',
-    rolloutPercent: clampPercent(
-      Number(formData.get(`flag.${flag.key}.rollout`) ?? flag.rolloutPercent)
-    ),
-  }));
+  const flags: FeatureFlag[] = mergeFlags(current.flags, (name) => {
+    const value = formData.get(name);
+    return value === null ? null : String(value);
+  });
 
   const logo = String(formData.get('logo') ?? '').trim();
 
@@ -71,9 +69,4 @@ export async function saveConfigAction(formData: FormData) {
 
   revalidatePath('/admin/settings');
   revalidatePath('/reception');
-}
-
-function clampPercent(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.min(100, Math.max(0, Math.round(value)));
 }

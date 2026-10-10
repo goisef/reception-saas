@@ -1,4 +1,5 @@
 import { collections } from '../store';
+import { isHiddenFeatureEnabled } from '../services/hidden-features';
 import type { Column } from './csv';
 import type {
   AccessNumber,
@@ -90,6 +91,12 @@ export async function buildDataset(
   switch (resource) {
     case 'customers': {
       const rows = await collections.customers().list(tenantId);
+      // 顔認証は隠し機能。公開されるまで CSV / Excel に列を出さない。
+      // JSON（データ移行用）は顧客の記録そのものなので、同意の状態を含めて落とさない
+      const showFace = await isHiddenFeatureEnabled(tenantId, 'faceRecognition');
+      const faceColumn: [string, string, (r: Customer) => string][] = showFace
+        ? [['faceEnrolled', '顔認証登録', (r) => (r.faceRecognition.enrolled ? 'あり' : 'なし')]]
+        : [];
       return {
         slug: 'customers',
         sheetName: '顧客',
@@ -101,7 +108,7 @@ export async function buildDataset(
           ['nameKana', 'フリガナ', (r) => r.nameKana],
           ['email', 'メールアドレス', (r) => r.email],
           ['phone', '電話番号', (r) => r.phone],
-          ['faceEnrolled', '顔認証登録', (r) => (r.faceRecognition.enrolled ? 'あり' : 'なし')],
+          ...faceColumn,
           ['externalIds', '外部ID', (r) => JSON.stringify(r.externalIds)],
           ['createdAt', '登録日時', (r) => formatDateTime(r.createdAt)],
         ]),

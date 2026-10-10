@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
-import { UserAdminError, type RequestContext } from './users';
+import { AdminActionError } from './errors';
+import type { RequestContext } from './users';
 
 /**
  * 管理ユーザー系の Server Action が共通で使う状態と補助。
@@ -21,12 +22,12 @@ export type ActionState = {
   values?: { email: string; displayName: string; role: string; storeIds: string[] };
 };
 
-/** UserAdminError は画面に出す文言へ。それ以外は握り潰さず上へ投げる。 */
+/** AdminActionError は画面に出す文言へ。それ以外は握り潰さず上へ投げる。 */
 export async function guarded(fn: () => Promise<ActionState>): Promise<ActionState> {
   try {
     return await fn();
   } catch (error) {
-    if (error instanceof UserAdminError) return { ok: false, error: error.display };
+    if (error instanceof AdminActionError) return { ok: false, error: error.display };
     throw error;
   }
 }

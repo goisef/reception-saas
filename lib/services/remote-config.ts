@@ -1,6 +1,7 @@
 import { notFound } from '../core/errors';
 import { stableBucket } from '../core/ids';
 import { collections } from '../store';
+import { HIDDEN_FEATURE_KEYS, enabledHiddenFeatures } from './hidden-features';
 import type { FeatureFlag, FeatureFlagKey, Id, RemoteConfig } from '../domain/types';
 
 /**
@@ -47,6 +48,13 @@ export async function resolve(params: {
       storeId: params.storeId,
       deviceId: params.deviceId ?? null,
     });
+  }
+
+  // 隠し機能は、テナントの公開スイッチが OFF の間は店舗のフラグが ON でも配らない。
+  // 店舗ごとの段階リリース設定を触らずに、機能全体を即座に引っ込められる。
+  const published = await enabledHiddenFeatures(params.tenantId);
+  for (const key of HIDDEN_FEATURE_KEYS) {
+    if (!published.has(key)) features[key] = false;
   }
 
   // 機能が OFF のボタンは配らない。端末側に判定を持たせない

@@ -608,9 +608,16 @@ paths:
                 notificationSound: { type: string }
                 logo: { type: string }
                 buttons: { type: array, items: { type: object } }
-                flags: { type: array, items: { type: object } }
+                flags:
+                  type: array
+                  items: { type: object }
+                  description: |
+                    Feature Flag の配列。置き換えるのは通常のフラグだけで、
+                    隠し機能（例: faceRecognition）は常に現在の値が保たれる。
+                    隠し機能の値を変えようとすると 403。管理画面の機能管理から切り替える。
       responses:
         "200": { description: 更新完了 }
+        "403": { description: 隠し機能のフラグを変更しようとした、または権限がない }
 
   /api/v1/device/version:
     get:

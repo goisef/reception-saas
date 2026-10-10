@@ -14,6 +14,7 @@ import type {
   Reservation,
   Store,
   Tenant,
+  TenantFeatureGate,
   Visit,
   WebhookDelivery,
   WebhookEndpoint,
@@ -78,6 +79,8 @@ export async function ready(): Promise<void> {
 
 export const collections = {
   tenants: () => datastore().collection<Tenant>('tenants'),
+  // 隠し機能の公開スイッチ。1テナント1文書、無ければ非公開
+  tenantFeatures: () => datastore().collection<TenantFeatureGate>('tenant_features'),
   stores: () => datastore().collection<Store>('stores'),
   customers: () => datastore().collection<Customer>('customers'),
   reservations: () => datastore().collection<Reservation>('reservations'),

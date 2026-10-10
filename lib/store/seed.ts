@@ -506,8 +506,9 @@ function remoteConfig(store: Store, nowIso: string): RemoteConfig & { id: string
       { key: 'exitNotification', enabled: true, rolloutPercent: 100 },
       { key: 'staffReception', enabled: true, rolloutPercent: 100 },
       { key: 'eventReception', enabled: true, rolloutPercent: 100 },
-      // P1機能。段階リリースの例として 5% で配信中
-      { key: 'faceRecognition', enabled: true, rolloutPercent: 5 },
+      // 隠し機能（P1）。テナントの公開スイッチ (/admin/features) を入れても、
+      // 店舗側が無効のままなら端末へは配られない。公開した瞬間に一斉に出ないための二段構え
+      { key: 'faceRecognition', enabled: false, rolloutPercent: 0 },
       { key: 'calendar', enabled: false, rolloutPercent: 0 },
       { key: 'offlineMode', enabled: true, rolloutPercent: 25 },
     ],

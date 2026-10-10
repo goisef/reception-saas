@@ -1,6 +1,7 @@
 import { currentSession } from '@/lib/admin/session';
 import { collections, ready } from '@/lib/store';
 import * as remoteConfig from '@/lib/services/remote-config';
+import { isHiddenFeatureKey } from '@/lib/services/hidden-features';
 import { Card, PageHeading } from '../ui';
 import { saveConfigAction } from './actions';
 
@@ -9,7 +10,6 @@ export const dynamic = 'force-dynamic';
 const FLAG_LABEL: Record<string, string> = {
   qrReception: 'QR受付',
   numberReception: '4桁番号受付',
-  faceRecognition: '顔認証',
   staffReception: 'スタッフ受付',
   eventReception: 'イベント受付',
   exitNotification: '退出通知',
@@ -109,7 +109,10 @@ export default async function SettingsPage({
             機能が出たり消えたりしません（PRD 4-4）。
           </p>
           <div className="space-y-3">
-            {config.flags.map((flag) => (
+            {config.flags
+              // 隠し機能は「機能管理」画面で扱う。ここに出すと存在が見えてしまう
+              .filter((flag) => !isHiddenFeatureKey(flag.key))
+              .map((flag) => (
               <div
                 key={flag.key}
                 className="grid items-center gap-3 border-b border-slate-100 pb-3 last:border-0 md:grid-cols-[1fr_100px_160px]"

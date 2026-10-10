@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { newId, newRequestId, newToken, sha256Hex } from '../core/ids';
 import { collections, datastore, ready } from '../store';
 import * as audit from '../security/audit';
+import { AdminActionError } from './errors';
 import { hashPassword, verifyPassword } from './password';
 import {
   INVITE_TTL_MS,
@@ -23,8 +24,8 @@ import type { AdminInvitation, AdminUser, Id, Role } from '../domain/types';
  */
 
 /** 画面にそのまま出してよい文言を持つエラー。内部の事情は含めない。 */
-export class UserAdminError extends Error {
-  constructor(public readonly display: string) {
+export class UserAdminError extends AdminActionError {
+  constructor(display: string) {
     super(display);
     this.name = 'UserAdminError';
   }

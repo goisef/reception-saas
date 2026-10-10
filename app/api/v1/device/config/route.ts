@@ -2,6 +2,7 @@ import { apiRoute } from '@/lib/api/handler';
 import { badRequest } from '@/lib/core/errors';
 import { Validator } from '@/lib/core/validate';
 import { assertStoreAccess } from '@/lib/security/auth';
+import { mergeApiFlags } from '@/lib/services/flag-form';
 import * as remoteConfig from '@/lib/services/remote-config';
 
 type ConfigPatch = Parameters<typeof remoteConfig.updateConfig>[2];
@@ -43,6 +44,14 @@ export const PATCH = apiRoute(
 
     assertStoreAccess(ctx.principal, storeId!);
 
+    // 隠し機能のフラグは API から変えさせない（lib/services/flag-form.ts）
+    const flags = Array.isArray(ctx.body.flags)
+      ? mergeApiFlags(
+          (await remoteConfig.getRaw(ctx.principal.tenantId, storeId!)).flags,
+          ctx.body.flags
+        )
+      : undefined;
+
     const updated = await remoteConfig.updateConfig(ctx.principal.tenantId, storeId!, {
       ...(theme !== undefined ? { theme } : {}),
       ...(language !== undefined ? { language } : {}),
@@ -51,9 +60,7 @@ export const PATCH = apiRoute(
       ...(Array.isArray(ctx.body.buttons)
         ? { buttons: ctx.body.buttons as ConfigPatch['buttons'] }
         : {}),
-      ...(Array.isArray(ctx.body.flags)
-        ? { flags: ctx.body.flags as ConfigPatch['flags'] }
-        : {}),
+      ...(flags ? { flags } : {}),
     });
 
     return { body: { data: updated } };

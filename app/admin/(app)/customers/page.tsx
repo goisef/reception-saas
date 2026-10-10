@@ -1,6 +1,7 @@
 import { currentSession } from '@/lib/admin/session';
 import { ready } from '@/lib/store';
 import * as customers from '@/lib/services/customers';
+import { isHiddenFeatureEnabled } from '@/lib/services/hidden-features';
 import { Badge, PageHeading, Table, formatDateTime } from '../ui';
 
 export const dynamic = 'force-dynamic';
@@ -13,6 +14,8 @@ export default async function CustomersPage({
   await ready();
   const session = await currentSession();
   const { q } = await searchParams;
+  // 顔認証は隠し機能。公開されるまで列も説明文も出さない
+  const showFace = await isHiddenFeatureEnabled(session.tenantId, 'faceRecognition');
 
   const rows = await customers.list(session.tenantId, { query: q });
   const histories = await Promise.all(
@@ -23,7 +26,11 @@ export default async function CustomersPage({
     <>
       <PageHeading
         title="顧客"
-        description="来店・予約・滞在の履歴と、顔認証の登録状態を管理します。"
+        description={
+          showFace
+            ? '来店・予約・滞在の履歴と、顔認証の登録状態を管理します。'
+            : '来店・予約・滞在の履歴を管理します。'
+        }
       />
 
       <form className="mb-4 flex gap-2">
@@ -42,7 +49,15 @@ export default async function CustomersPage({
       </form>
 
       <Table
-        headers={['会員番号', '氏名', 'フリガナ', '来店回数', '平均滞在', '最終来店', '顔認証']}
+        headers={[
+          '会員番号',
+          '氏名',
+          'フリガナ',
+          '来店回数',
+          '平均滞在',
+          '最終来店',
+          ...(showFace ? ['顔認証'] : []),
+        ]}
         empty={rows.length === 0 ? '該当する顧客がいません' : undefined}
       >
         {rows.map((c, i) => {
@@ -57,13 +72,15 @@ export default async function CustomersPage({
                 {stats.averageStayMinutes === null ? '—' : `${stats.averageStayMinutes}分`}
               </td>
               <td className="px-4 py-3">{formatDateTime(stats.lastVisitAt)}</td>
-              <td className="px-4 py-3">
-                {c.faceRecognition.enrolled ? (
-                  <Badge tone="success">登録済み</Badge>
-                ) : (
-                  <Badge>未登録</Badge>
-                )}
-              </td>
+              {showFace && (
+                <td className="px-4 py-3">
+                  {c.faceRecognition.enrolled ? (
+                    <Badge tone="success">登録済み</Badge>
+                  ) : (
+                    <Badge>未登録</Badge>
+                  )}
+                </td>
+              )}
             </tr>
           );
         })}

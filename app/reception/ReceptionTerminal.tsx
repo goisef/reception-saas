@@ -281,11 +281,17 @@ export default function ReceptionTerminal({
     () => buttons.find((b) => b.action === 'reception.number'),
     [buttons]
   );
-  /** 下部の呼び出し系。QR と番号以外はここへ並べる。 */
+  /**
+   * 下部の呼び出し系。
+   *
+   * 知っている action だけを並べる。サーバーが新しい機能のボタン（例: reception.face）を
+   * 配っても、この端末が対応していなければ無視する。呼び出しボタンとして描くと、
+   * 押した来店客が意図せず担当者を呼ぶことになる。古い端末が新しい設定を受けても壊れない。
+   */
   const callButtons = useMemo(
     () =>
       buttons
-        .filter((b) => b.action !== 'reception.qr' && b.action !== 'reception.number')
+        .filter((b) => b.action === 'reception.staff' || b.action === 'reception.event')
         .sort((a, b) => a.order - b.order),
     [buttons]
   );

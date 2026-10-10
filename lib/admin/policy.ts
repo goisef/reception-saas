@@ -46,6 +46,16 @@ export function canManageUsers(role: Role): boolean {
 }
 
 /**
+ * 機能のON/OFF（隠し機能の公開を含む）を切り替えられるロール。
+ *
+ * 公開すると全店舗の端末と画面に影響し、顔認証のように生体情報を扱う機能も
+ * 含まれる。利用者の管理と同じ、管理者だけに限る。
+ */
+export function canManageFeatures(role: Role): boolean {
+  return USER_ADMIN_ROLES.includes(role);
+}
+
+/**
  * 付与してよいロール。
  *
  * SuperAdmin はプラットフォーム運営側の権限で、テナントの画面から

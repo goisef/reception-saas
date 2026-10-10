@@ -211,6 +211,22 @@ export type FeatureFlagKey =
   | 'numberReception'
   | 'qrReception';
 
+/**
+ * テナント単位の「隠し機能」の公開スイッチ。キーが無ければ非公開。
+ *
+ * 店舗ごとの Feature Flag (RemoteConfig.flags) とは別に持つ。
+ * 公開スイッチが OFF の間は、店舗側のフラグが ON でも機能は現れない。
+ * 店舗の段階リリース設定を壊さずに、機能全体を即座に引っ込められる。
+ */
+export type TenantFeatureGate = {
+  /** テナントIDと同値（1テナント1文書） */
+  id: Id;
+  tenantId: Id;
+  hidden: Partial<
+    Record<FeatureFlagKey, { enabled: boolean; updatedAt: IsoDateTime; updatedBy: Id }>
+  >;
+};
+
 export type FeatureFlag = {
   key: FeatureFlagKey;
   enabled: boolean;

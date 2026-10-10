@@ -84,6 +84,8 @@ PRD: [`PRD.md`](./PRD.md) / デプロイ: [`DEPLOYMENT.md`](./DEPLOYMENT.md)
 
 ## Step 7 — 顔認証PoC
 
+- [x] 隠し機能の公開スイッチ（機能管理画面 `/admin/features`）。既定は非公開
+- [x] 店舗ごとの段階リリース、公開時の確認事項（PRD 8-5）、監査ログ
 - [ ] SDK 比較評価（Liveness / 1:1 / 国内リージョン保管）
 - [ ] 1:1 照合フロー（会員ID → 撮影 → Liveness → 照合）
 - [ ] 同意・削除・保存期間・アクセスログ
