@@ -190,6 +190,27 @@ ios/                    Capacitor が生成した Xcode プロジェクト
 - **セッショントークンに権限を入れない。** ロールと店舗範囲は毎回データストアから
   引く。権限を落としたのに古い Cookie で操作できる、という穴を残さない。
 
+## 依存の脆弱性
+
+CI は `npm audit` を2段で回します。
+
+| ステップ | 対象 | 結果 |
+| --- | --- | --- |
+| Dependency scan (production) | 本番に載る依存 | high 以上があれば CI を止める |
+| Dependency scan (dev tooling) | 開発用ツールを含む全体 | 止めない。毎回出して増減を見る |
+
+開発用ツール（Firebase エミュレータ、ESLint、Capacitor CLI）は本番に載りません。
+上流に修正版が無いもの（例: `braces` は最新版が影響範囲内）があり、そこで止めると
+直しようがなく CI が赤のまま固定されるためです。
+
+`package.json` の `overrides` は、依存の依存に出た脆弱性を、上流の更新を待たずに
+修正版へ固定するためのものです。`@grpc/grpc-js`（Firestore ドライバが使う）、
+`source-map-js`、`brace-expansion`（メジャーごと）を固定しています。
+上流が追いついたら外せるので、`npm audit` の結果が変わったら見直してください。
+
+Capacitor を更新すると、`ios/App/CapApp-SPM/Package.swift` の `capacitor-swift-pm` の
+バージョンも `cap sync` が書き換えます。npm 側と揃える必要があるため、一緒にコミットします。
+
 ## 未実装（本番までに必要なもの）
 
 | 項目 | 内容 |
