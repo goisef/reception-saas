@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { hashPassword, verifyPassword } from '@/lib/admin/password';
 import { issueAdminToken, verifyAdminToken } from '@/lib/admin/token';
 
@@ -193,5 +193,38 @@ describe('初期管理者の作成', () => {
     const ds = new MemoryDatastore();
     await bootstrapAdmin(ds, 'ten_boot');
     expect(await ds.collection<AdminUser>('admin_users').list('ten_boot')).toHaveLength(0);
+  });
+});
+
+
+describe('本番ビルドでのシード', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('パスワードを明示しないと、管理ユーザーを作らない', async () => {
+    // ソースに書かれた既定のパスワードでログインできる管理者を、
+    // 共有URLの上に残さない
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('RECEPTION_DEMO_ADMIN_PASSWORD', '');
+    const { MemoryDatastore } = await import('@/lib/store/datastore');
+    const { seed, DEMO_TENANT_ID } = await import('@/lib/store/seed');
+    type AdminUser = import('@/lib/domain/types').AdminUser;
+
+    const ds = new MemoryDatastore();
+    await seed(ds);
+    expect(await ds.collection<AdminUser>('admin_users').list(DEMO_TENANT_ID)).toHaveLength(0);
+    // 業務データのシードは通常どおり入る
+    expect(await ds.collection('tenants').list(DEMO_TENANT_ID)).toHaveLength(1);
+  });
+
+  it('パスワードを明示したときだけ作る', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('RECEPTION_DEMO_ADMIN_PASSWORD', 'an-explicit-demo-passphrase');
+    const { MemoryDatastore } = await import('@/lib/store/datastore');
+    const { seed, DEMO_TENANT_ID } = await import('@/lib/store/seed');
+    type AdminUser = import('@/lib/domain/types').AdminUser;
+
+    const ds = new MemoryDatastore();
+    await seed(ds);
+    expect(await ds.collection<AdminUser>('admin_users').list(DEMO_TENANT_ID)).toHaveLength(3);
   });
 });

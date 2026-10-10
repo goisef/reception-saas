@@ -90,6 +90,9 @@ npx vercel link          # このリポジトリを Vercel プロジェクトに
 | `RECEPTION_ACCESS_PASSWORD` | 共有用パスワード | 8文字以上 |
 | `RECEPTION_SESSION_SECRET` | ランダムな文字列 | `openssl rand -base64 32` |
 | `RECEPTION_ENV_LABEL` | `demo` または `dev` | ログイン画面に出ます |
+| `RECEPTION_ADMIN_SESSION_SECRET` | ランダムな文字列 | `openssl rand -base64 32`。**未設定だと `/admin` が開けません**（偽造を防ぐため起動を止めます） |
+| `RECEPTION_DEMO_ADMIN_PASSWORD` | 10文字以上のパスワード | **必ず設定。** 未設定だとデモの管理ユーザーが作られず、管理画面にログインできません（既知のパスワードを共有URLに残さないため） |
+| `RECEPTION_PUBLIC_URL` | デプロイ先のURL（例 `https://xxx.vercel.app`） | 招待リンクの土台。未設定だと Host ヘッダから組み立てます |
 | `RECEPTION_SEED` | 初回だけ未設定、以降 `0` | 下記参照 |
 
 ```bash
@@ -101,6 +104,17 @@ npx vercel --prod
 初回デプロイ時はデモデータを入れたいので `RECEPTION_SEED` は未設定のままに
 します。シードは**投入済みなら何もしない**ので、2回目以降の起動で上書き
 されることはありません。
+
+シードには管理画面のログイン（`admin@example.com` / `osaka@example.com` /
+`viewer@example.com`）が含まれます。**3人とも `RECEPTION_DEMO_ADMIN_PASSWORD` の
+値がパスワードになる**ので、共有URLに出す前に必ず設定してください。
+初回ログイン後は、管理画面の「アカウント」からご自身のパスワードを変更できます。
+メールアドレスは `RECEPTION_DEMO_ADMIN_EMAIL` で変えられます（管理者の1人目のみ）。
+
+**すでにデプロイ済みの環境**は、テナントが投入済みなのでシードが走り直さず、管理ユーザーが
+1人もいません。その場合は `RECEPTION_BOOTSTRAP_ADMIN_EMAIL` と
+`RECEPTION_BOOTSTRAP_ADMIN_PASSWORD` を設定して再デプロイすると、管理ユーザーが0人のときだけ
+管理者を1人作ります（ログインできたら環境変数は外してください）。
 
 デモ中に追加したデータを消したくないので、そのままで構いません。
 初期状態に戻したい場合は Firestore の `tenants` コレクションを削除してから

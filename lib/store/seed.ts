@@ -267,7 +267,17 @@ async function insertSeedData(ds: Datastore): Promise<void> {
 
   // 管理Webのログイン。役割ごとに1人ずつ入れて、権限の出し分けを
   // ログインし直すだけで確認できるようにする。
-  const adminUsers: AdminUser[] = [
+  // 本番ビルドで既定のパスワード（ソースに書いてある）のままログインを作ると、
+  // 共有URLを知っている人なら誰でも管理者になれる。明示的に指定されたときだけ作る。
+  const seedAdmins =
+    process.env.NODE_ENV !== 'production' || Boolean(process.env.RECEPTION_DEMO_ADMIN_PASSWORD);
+  if (!seedAdmins) {
+    console.warn(
+      '[seed] RECEPTION_DEMO_ADMIN_PASSWORD が未設定のため、デモの管理ユーザーは作りません。' +
+        '設定するか、RECEPTION_BOOTSTRAP_ADMIN_EMAIL / _PASSWORD で初期管理者を作ってください。'
+    );
+  }
+  const adminUsers: AdminUser[] = seedAdmins ? [
     {
       id: 'usr_demo_admin',
       tenantId: DEMO_TENANT_ID,
@@ -307,7 +317,7 @@ async function insertSeedData(ds: Datastore): Promise<void> {
       createdAt: nowIso,
       updatedAt: nowIso,
     },
-  ];
+  ] : [];
   for (const u of adminUsers) await ds.collection<AdminUser>('admin_users').insert(u);
 
   const releases: (AppRelease & { tenantId: string })[] = [
