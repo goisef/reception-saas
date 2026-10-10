@@ -4,7 +4,7 @@ PRD: [`PRD.md`](./PRD.md) / デプロイ: [`DEPLOYMENT.md`](./DEPLOYMENT.md)
 
 | Step | 内容 | 優先度 | 状態 |
 | --- | --- | --- | --- |
-| 1 | PWA + API + 管理Web | P0 | ほぼ完了 |
+| 1 | PWA + API + 管理Web | P0 | 完了（Rate Limit の共有ストアのみ意図的に保留） |
 | 2 | 帳票 + 多店舗 + 権限 | P0 | 実装中 |
 | 3 | Android APK | P0/P1 | 実装中 |
 | 4 | Google / Outlook Calendar | P1 | 未着手 |
@@ -32,7 +32,7 @@ PRD: [`PRD.md`](./PRD.md) / デプロイ: [`DEPLOYMENT.md`](./DEPLOYMENT.md)
 - [x] Firestore ドライバ実装
 - [x] 管理Webの認証（PBKDF2 + 署名付きセッション + 監査ログ）
 - [x] Idempotency の共有ストア（複数インスタンス対応）
-- [ ] 管理ユーザーの招待・パスワード変更画面
+- [x] 管理ユーザーの招待・停止・ロール変更・パスワード変更（使い捨てリンク。メール送信は未実装）
 - [ ] Rate Limit の共有ストア（意図的に見送り中。lib/security/rate-limit.ts 参照）
 
 ## Step 2 — 帳票 + 多店舗 + 権限

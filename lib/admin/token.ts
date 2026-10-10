@@ -4,7 +4,7 @@
  * proxy.ts (Edge) からも検証するため、データストアには触らず
  * Web Crypto だけで完結させる。
  *
- * トークンに入れるのは「誰か」と「いつまでか」だけ。ロールや店舗の
+ * トークンに入れるのは「誰か」と「いつ発行していつまでか」だけ。ロールや店舗の
  * 範囲は入れない。入れてしまうと、権限を落としたあともログアウトするまで
  * 古い権限が生き続ける。権限は毎回データストアから引く
  * (lib/admin/session.ts の currentSession)。
@@ -18,6 +18,8 @@ const TTL_SECONDS = 12 * 60 * 60;
 export type AdminToken = {
   userId: string;
   tenantId: string;
+  /** 発行時刻 (UNIX 秒)。パスワード変更より前のセッションを無効にするために使う */
+  issuedAt: number;
   /** UNIX 秒 */
   expiresAt: number;
 };
@@ -68,10 +70,12 @@ export async function issueAdminToken(
   user: { userId: string; tenantId: string },
   now = Date.now()
 ): Promise<string> {
+  const issuedAt = Math.floor(now / 1000);
   const payload: AdminToken = {
     userId: user.userId,
     tenantId: user.tenantId,
-    expiresAt: Math.floor(now / 1000) + TTL_SECONDS,
+    issuedAt,
+    expiresAt: issuedAt + TTL_SECONDS,
   };
   const encoded = toBase64Url(encoder().encode(JSON.stringify(payload)));
   const key = await hmacKey(secret);
@@ -111,6 +115,9 @@ export async function verifyAdminToken(
 
   if (typeof payload.userId !== 'string' || typeof payload.tenantId !== 'string') return null;
   if (!Number.isFinite(payload.expiresAt) || payload.expiresAt * 1000 < now) return null;
+  // issuedAt の無いトークンは受け付けない。パスワード変更での失効判定ができず、
+  // 失効できないセッションを残すことになるため
+  if (!Number.isFinite(payload.issuedAt)) return null;
   return payload;
 }
 

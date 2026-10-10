@@ -44,7 +44,39 @@ export async function findSession(): Promise<AdminSession | null> {
   await ready();
   const user = await collections.adminUsers().get(payload.tenantId, payload.userId);
   if (!user || user.status !== 'active') return null;
+
+  // パスワードを変えた時点より前に発行したセッションは無効にする。
+  // 乗っ取られた疑いでパスワードを変えても、盗まれた Cookie が
+  // 有効期限まで使えてしまうのを防ぐ。秒単位で比べるので、変更と同じ秒に
+  // 発行された新しいセッションは生き残る。
+  if (isRevokedByPasswordChange(payload.issuedAt, user.passwordChangedAt)) return null;
   return toSession(user);
+}
+
+export function isRevokedByPasswordChange(
+  issuedAtSeconds: number,
+  passwordChangedAt: string | null | undefined
+): boolean {
+  if (!passwordChangedAt) return false;
+  const changed = Date.parse(passwordChangedAt);
+  if (!Number.isFinite(changed)) return false;
+  return issuedAtSeconds < Math.floor(changed / 1000);
+}
+
+/** セッション Cookie を発行してブラウザに載せる。 */
+export async function startSession(user: AdminUser): Promise<void> {
+  const token = await issueAdminToken(adminSessionSecret(), {
+    userId: user.id,
+    tenantId: user.tenantId,
+  });
+  (await cookies()).set(ADMIN_COOKIE, token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    // ローカル開発は http なので、本番だけ secure を付ける
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 12 * 60 * 60,
+  });
 }
 
 /**
@@ -92,7 +124,9 @@ export async function authenticate(
     .list(tenantId, (u) => u.email.toLowerCase() === normalized);
   const user = users[0];
 
-  const matched = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
+  // 招待中の利用者は passwordHash が空文字。?? だと空文字がそのまま通り、
+  // 検証が一瞬で終わって「その利用者は存在する」と応答時間で分かってしまう。
+  const matched = await verifyPassword(password, user?.passwordHash || DUMMY_HASH);
   if (!user || !matched) return { ok: false, reason: 'invalid' };
   if (user.status !== 'active') return { ok: false, reason: 'suspended' };
   return { ok: true, user };
@@ -108,18 +142,7 @@ export async function login(
   if (!result.ok) return result;
   const { user } = result;
 
-  const token = await issueAdminToken(adminSessionSecret(), {
-    userId: user.id,
-    tenantId: user.tenantId,
-  });
-  (await cookies()).set(ADMIN_COOKIE, token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    // ローカル開発は http なので、本番だけ secure を付ける
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: 12 * 60 * 60,
-  });
+  await startSession(user);
 
   await collections
     .adminUsers()

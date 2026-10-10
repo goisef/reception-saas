@@ -1,6 +1,7 @@
 import { MemoryDatastore, type Collection, type Datastore } from './datastore';
 import type {
   AccessNumber,
+  AdminInvitation,
   AdminUser,
   ApiClient,
   AppRelease,
@@ -89,6 +90,9 @@ export const collections = {
   apiClients: () => datastore().collection<ApiClient>('api_clients'),
   // 管理Webにログインする人。API を叩く外部システム (apiClients) とは別に持つ
   adminUsers: () => datastore().collection<AdminUser>('admin_users'),
+  // パスワード設定用の使い捨てリンク (招待 / 再設定)。トークンはハッシュのみ保存
+  adminInvitations: () =>
+    datastore().collection<AdminInvitation>('admin_invitations'),
   auditLogs: () => datastore().collection<AuditLog>('audit_logs'),
   webhookEndpoints: () => datastore().collection<WebhookEndpoint>('webhook_endpoints'),
   webhookDeliveries: () => datastore().collection<WebhookDelivery>('webhook_deliveries'),

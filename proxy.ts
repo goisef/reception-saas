@@ -34,7 +34,10 @@ export async function proxy(request: NextRequest) {
   // CSV出力に触れるのはログインした運営者だけにする。
   // こちらはローカル開発でも塞ぐ。開発中だけ通る道を作ると、
   // 権限の考慮漏れがそのまま本番へ出る。
-  if (path.startsWith('/admin') && !path.startsWith('/admin/login')) {
+  // /admin/invite/* はパスワードを設定する前の人が開くので、ここでは塞げない。
+  // 認可の根拠はリンクの秘密そのもの (lib/admin/users.ts)。
+  const open = path.startsWith('/admin/login') || path.startsWith('/admin/invite/');
+  if (path.startsWith('/admin') && !open) {
     const adminToken = request.cookies.get(ADMIN_COOKIE)?.value;
     if (!(await verifyAdminToken(adminSessionSecret(), adminToken))) {
       return redirectTo(request, '/admin/login');

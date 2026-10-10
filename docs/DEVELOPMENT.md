@@ -110,6 +110,7 @@ bash scripts/smoke.sh
 | `RECEPTION_DEMO_ADMIN_EMAIL` | `admin@example.com` | 開発用ログイン |
 | `RECEPTION_DEMO_ADMIN_PASSWORD` | `reception-dev` | 開発用ログイン |
 | `RECEPTION_APP_SERVER_URL` | なし | ネイティブアプリの接続先。`cap sync` で必須 |
+| `RECEPTION_PUBLIC_URL` | リクエストの Host | 招待リンクの土台。本番では必ず設定する |
 | `PORT` | `3000` | 待ち受けポート（Cloud Run では 8080） |
 
 ## ディレクトリ構成
@@ -136,6 +137,9 @@ lib/
     password.ts         PBKDF2 によるパスワード保管
     token.ts            署名付きセッション（Edge から検証する）
     session.ts          セッションの取得・ログイン・権限判定
+    policy.ts           ロールの付与可否・パスワード規則（純粋関数）
+    users.ts            招待・停止・ロール変更・パスワード設定（画面はここだけを呼ぶ）
+    bootstrap.ts        本番の初期管理者
 
 app/
   api/v1/               API v1
@@ -171,6 +175,11 @@ ios/                    Capacitor が生成した Xcode プロジェクト
 - **Server Action でも権限を確認する。** 管理画面から呼ばれるから安全、
   という前提は置かない（Zero Trust）。
 - **端末に判定を持たせない。** 表示文言もボタン構成も機能ON/OFFもサーバーが決める。
+- **利用者の操作は `lib/admin/users.ts` を通す。** 権限昇格の防止（自分より強い
+  ロールを付けられない）、最後の管理者の保護、テナント分離、監査ログを
+  1か所に集めてある。画面側で判定を書き直さない。
+- **使い捨てリンクの秘密は保存しない。** 保存するのは SHA-256 だけ。無効な理由
+  （期限切れ・使用済み・失効・停止）は画面に区別して出さない。
 - **セッショントークンに権限を入れない。** ロールと店舗範囲は毎回データストアから
   引く。権限を落としたのに古い Cookie で操作できる、という穴を残さない。
 
@@ -178,7 +187,6 @@ ios/                    Capacitor が生成した Xcode プロジェクト
 
 | 項目 | 内容 |
 | --- | --- |
-| 管理ユーザーの管理画面 | 招待・パスワード変更・停止をシード以外から行えない |
 | Rate Limit の共有ストア | 単一プロセス前提。全リクエストで書き込みが発生するため、あえて Firestore に載せていない（`lib/security/rate-limit.ts` の説明を参照） |
 | Storage | 帳票をメモリに置いている。GCS + 署名付きURLへ |
 | キュー基盤 | Webhook / 帳票 / 通知のワーカーを手動エンドポイントで代用中 |

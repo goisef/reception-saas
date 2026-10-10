@@ -79,7 +79,7 @@ APK / IPA                   設定変更
 | --- | --- |
 | 受付端末 PWA | Remote Config駆動のホーム / QR受付 / 4桁番号受付 / 退出、Service Worker、オフラインキュー、死活通知、バージョン確認 |
 | API v1 | 顧客 / 予約 / 受付 / 退出 / 来店 / 番号 / 店舗 / 端末 / 帳票 / Webhook、`/health` `/ready`、OpenAPI 3.1 |
-| セキュリティ | 管理Webのログイン（PBKDF2 保管 / 署名付きセッション）、APIキー認証（ハッシュ保管）、RBAC 7ロール、テナント分離、Rate Limit、Idempotency-Key、監査ログ、APIバージョニング、共有URLのパスワード保護 |
+| セキュリティ | 管理Webのログイン・利用者の招待と停止・パスワード変更（PBKDF2 保管 / 署名付きセッション / 変更時に他端末を失効）、APIキー認証（ハッシュ保管）、RBAC 7ロール、テナント分離、Rate Limit、Idempotency-Key、監査ログ、APIバージョニング、共有URLのパスワード保護 |
 | データ | Firestore ドライバ（in-memory と契約テストで等価性を担保）|
 | 4桁番号 | 8状態のライフサイクル、解放条件5種、Shared Number、時間指定確保、VIP固定番号 |
 | Webhook | HMAC-SHA256 + Timestamp + Nonce + Request ID、指数バックオフ再送 |
@@ -88,7 +88,7 @@ APK / IPA                   設定変更
 
 ### 未実装
 
-管理ユーザーの招待・パスワード変更画面（現在はシード投入のみ）、
+招待メールの実送信（現在はリンクを管理者が本人へ渡す）、
 Rate Limit の共有ストア、GCS、キュー基盤、通知の実送信、PDF帳票、
 顧客アプリ、SaaS管理画面、AI分析。
 

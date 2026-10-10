@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { currentSession } from '@/lib/admin/session';
+import { ROLE_LABEL, canManageUsers } from '@/lib/admin/policy';
 import { signOutAction } from '../login/actions';
 
-const NAV = [
+const NAV: { href: string; label: string; adminOnly?: boolean }[] = [
   { href: '/admin', label: 'ダッシュボード' },
   { href: '/admin/reservations', label: '予約' },
   { href: '/admin/visits', label: '来店・退出' },
@@ -11,6 +12,7 @@ const NAV = [
   { href: '/admin/access-numbers', label: '番号' },
   { href: '/admin/exports', label: '帳票' },
   { href: '/admin/settings', label: '端末設定' },
+  { href: '/admin/users', label: '利用者', adminOnly: true },
 ];
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
@@ -24,12 +26,12 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             Reception 管理
           </Link>
           <div className="flex items-center gap-3 text-sm text-slate-500">
-            <span>
+            <Link href="/admin/account" className="hover:text-slate-900">
               {session.displayName}
               <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs">
-                {session.role}
+                {ROLE_LABEL[session.role]}
               </span>
-            </span>
+            </Link>
             {/* 共有端末で開かれることがある。すぐ閉じられるようにしておく */}
             <form action={signOutAction}>
               <button
@@ -42,7 +44,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
           </div>
         </div>
         <nav className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 pb-2">
-          {NAV.map((item) => (
+          {NAV.filter((item) => !item.adminOnly || canManageUsers(session.role)).map((item) => (
             <Link
               key={item.href}
               href={item.href}

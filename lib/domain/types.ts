@@ -283,12 +283,47 @@ export type AdminUser = {
   role: Role;
   /** 空なら全店舗。AreaManager / StoreManager では絞られる */
   storeIds: Id[];
-  /** 平文もハッシュ元も保存しない。PBKDF2 の派生鍵のみ (PRD 13-4) */
+  /**
+   * 平文もハッシュ元も保存しない。PBKDF2 の派生鍵のみ (PRD 13-4)。
+   * 招待中 (invited) はまだパスワードが無いので空文字。
+   */
   passwordHash: string;
-  status: 'active' | 'suspended';
+  /**
+   * invited   招待済みでパスワード未設定。ログインできない
+   * active    利用中
+   * suspended 停止中。ログインも既存セッションも即時に無効になる
+   */
+  status: 'invited' | 'active' | 'suspended';
+  /**
+   * パスワードを変えた時刻。これより前に発行したセッションは無効にする。
+   * パスワードを変えても盗まれたセッションが生き続ける、という穴を塞ぐため。
+   * 古いデータには無いので、読む側は null として扱うこと。
+   */
+  passwordChangedAt?: string | null;
   lastLoginAt: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+/**
+ * パスワード設定用の使い捨てリンク。招待とパスワード再設定で共用する。
+ *
+ * リンクの実体 (トークン) は作成時に一度だけ画面へ返し、保存するのは
+ * SHA-256 ハッシュのみ。APIキーと同じ扱いで、データストアが漏れても
+ * リンクは使えない (PRD 13-4)。
+ */
+export type AdminInvitation = {
+  id: Id;
+  tenantId: Id;
+  /** パスワードを設定する利用者 */
+  userId: Id;
+  kind: 'invite' | 'reset';
+  tokenHash: string;
+  status: 'pending' | 'accepted' | 'revoked';
+  createdBy: Id;
+  createdAt: string;
+  expiresAt: string;
+  acceptedAt: string | null;
 };
 
 export type Scope =

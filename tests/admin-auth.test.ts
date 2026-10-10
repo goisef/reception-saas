@@ -82,12 +82,12 @@ describe('セッショントークン', () => {
 
   it('ロールを持ち回らない', async () => {
     // 権限をトークンに入れると、権限を落としてもログアウトするまで古い権限が生きる。
-    // 中身は誰かと期限だけであることを固定する。
+    // 中身は誰か・発行時刻・期限だけであることを固定する。
     const token = await issueAdminToken(SECRET, { userId: 'usr_1', tenantId: 'ten_1' });
     const decoded = JSON.parse(
       Buffer.from(token.split('.')[0], 'base64url').toString('utf8')
     );
-    expect(Object.keys(decoded).sort()).toEqual(['expiresAt', 'tenantId', 'userId']);
+    expect(Object.keys(decoded).sort()).toEqual(['expiresAt', 'issuedAt', 'tenantId', 'userId']);
   });
 });
 

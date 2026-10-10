@@ -17,10 +17,9 @@ Cloud Load Balancer → WAF → API Gateway → Cloud Run → Application → Fi
 | --- | --- | --- |
 | Rate Limit がプロセス内 | インスタンス数だけ上限が増える。実質的に制限が効かない | Cloud Armor か Memorystore(Redis) へ（`lib/security/rate-limit.ts` に判断の経緯） |
 | 帳票がメモリ上 | 生成したインスタンス以外からダウンロードできない | GCS + 署名付きURL へ |
-| 管理ユーザーを画面から作れない | 招待・パスワード変更・停止がシード経由でしかできない | 管理ユーザー画面の実装 |
 
 塞ぎ済み: データストア（Firestore ドライバ）、Idempotency（共有ストア）、
-管理Webの認証（PBKDF2 + 署名付きセッション）。
+管理Webの認証（PBKDF2 + 署名付きセッション）、管理ユーザーの招待・停止・パスワード変更。
 
 ### 必ず設定する環境変数
 
@@ -30,6 +29,7 @@ Cloud Load Balancer → WAF → API Gateway → Cloud Run → Application → Fi
 | `RECEPTION_SEED=0` | デモデータと開発用ログインが本番に入る |
 | `RECEPTION_ADMIN_SESSION_SECRET` | 管理Webのセッションを偽造できる。本番では起動を止める |
 | `RECEPTION_ACCESS_PASSWORD` | 共有URLの目隠しが無効になる（本番公開時は意図的に外す） |
+| `RECEPTION_PUBLIC_URL` | 招待リンクの土台が Host ヘッダ由来になる（例: `https://reception.example.com`） |
 
 `minScale: 1` / `maxScale: 1` にすれば単一インスタンスで動きますが、
 それは**デモ用の運用**です。実店舗のデータを入れる前に上記を塞いでください。
@@ -96,8 +96,22 @@ gcloud run services update reception-saas --region=$REGION \
   --remove-env-vars RECEPTION_BOOTSTRAP_ADMIN_EMAIL,RECEPTION_BOOTSTRAP_ADMIN_PASSWORD
 ```
 
-外し忘れても、既に利用者がいれば何もしません。2人目以降は管理Webから
-招待する想定ですが、その画面はまだありません。
+外し忘れても、既に利用者がいれば何もしません。2人目以降は管理Webの
+「利用者」画面から招待します（下記）。
+
+### 利用者の招待
+
+管理者は **利用者 → 利用者を招待** からメールアドレス・ロール・担当店舗を指定して
+招待リンクを作ります。**メールは自動送信されません**（通知の実送信は未実装）。
+表示されたリンクを、本人へ社内チャット等でお伝えください。
+
+- リンクは **1回だけ**使えます。招待は7日間、パスワード再設定は24時間有効です
+- リンクは作成時にしか表示されません（保存しているのはハッシュだけ）。
+  失くしたら「招待リンクを再発行」で作り直します。前のリンクは無効になります
+- 本人がパスワードを決めると、そのままログインされます
+- パスワードを変更・再設定すると、その人の**他の端末のログインはすべて無効**になります
+- 停止すると、ログイン中のセッションも含めて即座に使えなくなります
+- 最後の管理者は停止・降格できません。自分自身のロール変更・停止もできません
 
 ## 3. ビルドとデプロイ
 
