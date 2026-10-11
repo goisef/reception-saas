@@ -13,6 +13,7 @@ export const dynamic = 'force-dynamic';
 const ENV_LABEL: Record<string, { text: string; tone: string }> = {
   dev: { text: '開発環境', tone: 'bg-amber-100 text-amber-900' },
   demo: { text: 'デモ環境', tone: 'bg-emerald-100 text-emerald-900' },
+  prod: { text: '本番環境', tone: 'bg-rose-100 text-rose-900' },
   local: { text: 'ローカル', tone: 'bg-slate-100 text-slate-700' },
 };
 

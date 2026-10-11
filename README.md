@@ -131,6 +131,7 @@ Apple Business Manager / App Store を使い分けます。
 | [`docs/ROADMAP.md`](./docs/ROADMAP.md) | Step 1〜9 の開発計画と進捗 |
 | [`docs/DEVELOPMENT.md`](./docs/DEVELOPMENT.md) | 開発ガイド・ディレクトリ構成・設計上の約束 |
 | [`docs/HOSTING-FREE.md`](./docs/HOSTING-FREE.md) | **無料で共有URLを立てる**（Vercel + Firestore） |
+| [`docs/ENVIRONMENTS.md`](./docs/ENVIRONMENTS.md) | 本番 / 開発・デモの分け方と、本番を立てる前の条件 |
 | [`docs/APP-RELEASE.md`](./docs/APP-RELEASE.md) | APK / IPA のビルド・署名・配布 |
 | [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) | Cloud Run へのデプロイ手順（本番想定） |
 | [`openapi/reception-v1.yaml`](./openapi/reception-v1.yaml) | API 仕様（単一の正） |
